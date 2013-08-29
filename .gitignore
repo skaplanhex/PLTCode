@@ -1,0 +1,2 @@
+# Ignore all root files when uploading to git
+*.root

@@ -30,7 +30,11 @@
 
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 //PSimHitContainer includes PSimHit and Vector already
+#include "TH2D.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHitContainer.h"
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include <math.h>
 // user defines
 #ifndef SKDEBUG
 #define SKDEBUG
@@ -59,6 +63,10 @@ private:
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
+    edm::Service<TFileService> fs;
+    TH1D *heta;
+    int hitCount;
+    
 
     
 };
@@ -79,6 +87,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 {
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
+    hitCount = 0;
     
 }
 
@@ -107,8 +116,15 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     
 #ifdef SKDEBUG
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
-        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
-        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
+        double theta = iHit->thetaAtEntry();
+        double eta = -log(tan(theta/2.));
+        heta->Fill(eta);
+//        std::cout << " " << std::endl;
+//        std::cout << "PDGID: " << iHit->particleType() << std::endl;
+//        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
+//        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
+//        std::cout << " " << std::endl;
+        hitCount++;
     }
     
     
@@ -121,12 +137,14 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 void 
 PLTSimHitAnalyzer::beginJob()
 {
+    heta = fs->make<TH1D>("heta","Particle Eta",1000,-6,6);    
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
 void 
 PLTSimHitAnalyzer::endJob() 
 {
+    std::cout << "Hit Count: " << hitCount << std::endl;
 }
 
 // ------------ method called when starting to processes a run  ------------
