@@ -64,10 +64,12 @@ private:
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
     edm::Service<TFileService> fs;
+    TH1D *htheta;
     TH1D *heta;
+    TH1D *hmom;
+    TH1D *htof;
+    TH1D *heloss;
     int hitCount;
-    
-
     
 };
 
@@ -118,7 +120,17 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
+        if( iHit->detUnitId() > 199 ){
+            theta *= -1;
+        }
+        if( iHit->detUnitId() > 199 ){
+            eta *= -1;
+        }
+        htheta->Fill(theta);
         heta->Fill(eta);
+        hmom->Fill(iHit->pabs());
+        htof->Fill(iHit->timeOfFlight());
+        heloss->Fill(iHit->energyLoss());
 //        std::cout << " " << std::endl;
 //        std::cout << "PDGID: " << iHit->particleType() << std::endl;
 //        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
@@ -137,7 +149,12 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 void 
 PLTSimHitAnalyzer::beginJob()
 {
-    heta = fs->make<TH1D>("heta","Particle Eta",1000,-6,6);    
+    htheta = fs->make<TH1D>("htheta","Particle Theta", 1000,-4,4);
+    heta = fs->make<TH1D>("heta","Particle Eta",1000,-5,5);
+    hmom = fs->make<TH1D>("hmom","Particle Momentum",200,0,200);
+    htof = fs->make<TH1D>("htof","Time of Flight from IP (ns)",100,0,25);
+    heloss = fs->make<TH1D>("heloss","Energy Loss",100,0,1);
+    
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
