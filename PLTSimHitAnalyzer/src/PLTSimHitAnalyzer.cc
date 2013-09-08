@@ -30,11 +30,11 @@
 
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 //PSimHitContainer includes PSimHit and Vector already
-#include "TH2D.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHitContainer.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 #include <math.h>
+#include <map>
 // user defines
 #ifndef SKDEBUG
 #define SKDEBUG
@@ -69,7 +69,7 @@ private:
     TH1D *hmom;
     TH1D *htof;
     TH1D *heloss;
-    int hitCount;
+    int threeFoldCount;
     
 };
 
@@ -89,7 +89,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 {
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
-    hitCount = 0;
+    threeFoldCount = 0;
     
 }
 
@@ -115,15 +115,44 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     
     Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
+    //keeps track of hit locations to easily count 3-fold coincidences
+    std::map< int,std::vector<int> > hitTracker;
     
 #ifdef SKDEBUG
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
+        int detid = iHit->detUnitId();
+        int pltNo = 0;
+        int telNo = 0;
+        int planeNo = 0;
+        //planeLoc is for the hitTracker to count 3-fold coincidences
+        int planeLoc = 0;
+        //if detid is in the 100s
+        if (detid < 200) {
+            pltNo = 1;
+        }
+        else
+            pltNo = 2;
+        //this returns the number in the ones place, which is what we need
+        planeNo = detid % 10;
+        telNo = (detid - planeNo - (100*pltNo))/10;
+        // two digit address giving side of IP and telescope number
+        planeLoc = 10*pltNo + telNo;
+        // if there hasn't been a hit in that telescope yet
+        if (hitTracker.count(planeLoc) == 0) {
+            hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+            //std::cout << "Telescope Added" << std::endl;
+        }
+        // if there has been a hit, add the plane number of this hit to the others
+        else{
+            hitTracker[planeLoc].push_back(planeNo);
+            //std::cout << "Hit added to telescope" << std::endl;
+        }
+        
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
+        //thetaAtEntry() only returns positive theta, if detid >=200, this means the sensor is in -z, which by definition is negative theta
         if( iHit->detUnitId() > 199 ){
             theta *= -1;
-        }
-        if( iHit->detUnitId() > 199 ){
             eta *= -1;
         }
         htheta->Fill(theta);
@@ -131,16 +160,20 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         hmom->Fill(iHit->pabs());
         htof->Fill(iHit->timeOfFlight());
         heloss->Fill(iHit->energyLoss());
-//        std::cout << " " << std::endl;
-//        std::cout << "PDGID: " << iHit->particleType() << std::endl;
-//        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
-//        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
-//        std::cout << " " << std::endl;
-        hitCount++;
+        //        std::cout << " " << std::endl;
+        //        std::cout << "PDGID: " << iHit->particleType() << std::endl;
+        //        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
+        //        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
+        //        std::cout << " " << std::endl;
     }
-    
-    
-    
+    //loop through the hit tracker to see if there are any 3-fold coincidences
+    for (std::map< int , std::vector<int> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
+        //if there are three hits in the telescope
+        if (iTel->second.size() == 3) {
+            threeFoldCount++;
+        } 
+    }
+    std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 #endif
 }
 
@@ -161,7 +194,6 @@ PLTSimHitAnalyzer::beginJob()
 void 
 PLTSimHitAnalyzer::endJob() 
 {
-    std::cout << "Hit Count: " << hitCount << std::endl;
 }
 
 // ------------ method called when starting to processes a run  ------------
