@@ -69,6 +69,7 @@ private:
     TH1D *hmom;
     TH1D *htof;
     TH1D *heloss;
+    TH1D *htel3fold;
     int threeFoldCount;
     
 };
@@ -169,11 +170,11 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     //loop through the hit tracker to see if there are any 3-fold coincidences
     for (std::map< int , std::vector<int> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
         //if there are three hits in the telescope
-        if (iTel->second.size() == 3) {
+        if (iTel->second.size() >= 3) {
+            htel3fold->Fill(iTel->first);
             threeFoldCount++;
         } 
     }
-    std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 #endif
 }
 
@@ -187,6 +188,7 @@ PLTSimHitAnalyzer::beginJob()
     hmom = fs->make<TH1D>("hmom","Particle Momentum",200,0,200);
     htof = fs->make<TH1D>("htof","Time of Flight from IP (ns)",100,0,25);
     heloss = fs->make<TH1D>("heloss","Energy Loss",100,0,1);
+    htel3fold = fs->make<TH1D>("htel3fold","Three-Fold Coincidences By Telescope",18,10.5,28.5);
     
 }
 
@@ -194,6 +196,7 @@ PLTSimHitAnalyzer::beginJob()
 void 
 PLTSimHitAnalyzer::endJob() 
 {
+    std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 }
 
 // ------------ method called when starting to processes a run  ------------

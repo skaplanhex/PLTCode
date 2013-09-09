@@ -1,0 +1,10 @@
+In order to run test_cfg.py, you will need MinBias_TuneZ2star_8TeV_pythia6_cff_GEN_SIM.root
+
+These are a few minimum bias events containing PSimHits from the PLT.
+
+You can get it by running the following command:
+
+wget http://www.physics.rutgers.edu/~skaplan/PLT/MinBias_TuneZ2star_8TeV_pythia6_cff_GEN_SIM.root
+
+You most likely will need to alter test_cfg.py to reflect the path to the root file, or else 
+CMSSW won't be able to find it.
