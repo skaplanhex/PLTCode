@@ -1,6 +1,8 @@
 # Ignore all root files when uploading to git
 *.root
-# Ignore my version of the run script and copy the test_cfg.py
-pltsimhitanalyzer_cfg.py*
+*.png
+*.eps
+.gitignore
 #ignore all backup files
 *~
+*._
