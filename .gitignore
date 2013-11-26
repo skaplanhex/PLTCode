@@ -1,8 +1,0 @@
-# Ignore all root files when uploading to git
-*.root
-*.png
-*.eps
-.gitignore
-#ignore all backup files
-*~
-*._
