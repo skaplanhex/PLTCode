@@ -73,17 +73,86 @@ private:
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
     edm::Service<TFileService> fs;
-    TH1D *htheta;
-    TH1D *heta;
-    TH1D *htof;
-    TH1D *heloss;
-    TH1D *htel3fold;
-    TH1D *hdetid;
-    TH1D *hparticlephi;
-    TH1D *hparticleeta;
-    TH1D *hhitmomentum;
-    TH2D *havgpixelhitcount;
-    TH1D *hRocNum;
+    TH1D* htheta;
+    TH1D* heta;
+    TH1D* htof;
+    TH1D* heloss;
+    TH1D* htel3fold;
+    TH1D* hdetid;
+    TH1D* hparticlephi;
+    TH1D* hparticleeta;
+    TH1D* hhitmomentum;
+    TH2D* havgpixelhitcount;
+    TH1D* hRocNum;
+    
+    //pixel maps
+    TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
+    TH2D* PlusZ_PlusX_Tel0_ROC1_PixelMap;
+    TH2D* PlusZ_PlusX_Tel0_ROC2_PixelMap;
+    
+    TH2D* PlusZ_PlusX_Tel1_ROC0_PixelMap;
+    TH2D* PlusZ_PlusX_Tel1_ROC1_PixelMap;
+    TH2D* PlusZ_PlusX_Tel1_ROC2_PixelMap;
+    
+    TH2D* PlusZ_PlusX_Tel2_ROC0_PixelMap;
+    TH2D* PlusZ_PlusX_Tel2_ROC1_PixelMap;
+    TH2D* PlusZ_PlusX_Tel2_ROC2_PixelMap;
+    
+    TH2D* PlusZ_PlusX_Tel3_ROC0_PixelMap;
+    TH2D* PlusZ_PlusX_Tel3_ROC1_PixelMap;
+    TH2D* PlusZ_PlusX_Tel3_ROC2_PixelMap;
+    
+    TH2D* PlusZ_MinusX_Tel0_ROC0_PixelMap;
+    TH2D* PlusZ_MinusX_Tel0_ROC1_PixelMap;
+    TH2D* PlusZ_MinusX_Tel0_ROC2_PixelMap;
+    
+    TH2D* PlusZ_MinusX_Tel1_ROC0_PixelMap;
+    TH2D* PlusZ_MinusX_Tel1_ROC1_PixelMap;
+    TH2D* PlusZ_MinusX_Tel1_ROC2_PixelMap;
+    
+    TH2D* PlusZ_MinusX_Tel2_ROC0_PixelMap;
+    TH2D* PlusZ_MinusX_Tel2_ROC1_PixelMap;
+    TH2D* PlusZ_MinusX_Tel2_ROC2_PixelMap;
+    
+    TH2D* PlusZ_MinusX_Tel3_ROC0_PixelMap;
+    TH2D* PlusZ_MinusX_Tel3_ROC1_PixelMap;
+    TH2D* PlusZ_MinusX_Tel3_ROC2_PixelMap;
+    
+    //minus z
+    
+    TH2D* MinusZ_PlusX_Tel0_ROC0_PixelMap;
+    TH2D* MinusZ_PlusX_Tel0_ROC1_PixelMap;
+    TH2D* MinusZ_PlusX_Tel0_ROC2_PixelMap;
+    
+    TH2D* MinusZ_PlusX_Tel1_ROC0_PixelMap;
+    TH2D* MinusZ_PlusX_Tel1_ROC1_PixelMap;
+    TH2D* MinusZ_PlusX_Tel1_ROC2_PixelMap;
+    
+    TH2D* MinusZ_PlusX_Tel2_ROC0_PixelMap;
+    TH2D* MinusZ_PlusX_Tel2_ROC1_PixelMap;
+    TH2D* MinusZ_PlusX_Tel2_ROC2_PixelMap;
+    
+    TH2D* MinusZ_PlusX_Tel3_ROC0_PixelMap;
+    TH2D* MinusZ_PlusX_Tel3_ROC1_PixelMap;
+    TH2D* MinusZ_PlusX_Tel3_ROC2_PixelMap;
+    
+    TH2D* MinusZ_MinusX_Tel0_ROC0_PixelMap;
+    TH2D* MinusZ_MinusX_Tel0_ROC1_PixelMap;
+    TH2D* MinusZ_MinusX_Tel0_ROC2_PixelMap;
+    
+    TH2D* MinusZ_MinusX_Tel1_ROC0_PixelMap;
+    TH2D* MinusZ_MinusX_Tel1_ROC1_PixelMap;
+    TH2D* MinusZ_MinusX_Tel1_ROC2_PixelMap;
+    
+    TH2D* MinusZ_MinusX_Tel2_ROC0_PixelMap;
+    TH2D* MinusZ_MinusX_Tel2_ROC1_PixelMap;
+    TH2D* MinusZ_MinusX_Tel2_ROC2_PixelMap;
+    
+    TH2D* MinusZ_MinusX_Tel3_ROC0_PixelMap;
+    TH2D* MinusZ_MinusX_Tel3_ROC1_PixelMap;
+    TH2D* MinusZ_MinusX_Tel3_ROC2_PixelMap;
+    
+    std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
     
 };
@@ -127,6 +196,7 @@ void
 PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
     using namespace edm;
+    using namespace std;
     
     Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
@@ -152,7 +222,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         ss << detid;
         std::string detidstring = ss.str();
         int detidsize = detidstring.size();
-        //since many identifiers can be zero, the size of the integer can vary! Need to switch on all possible sizes to determine the identifiers from the detid
+        //since many identifiers can be zero, the size of the integer can vary! Need to switch on all possible sizes to determine the identifiers from the detid.
+        
+        //There needs to be a more elegant way to do this...
         int pltNo = -1;
         int halfCarriageNo = -1;
         int telNo = -1;
@@ -223,6 +295,37 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         }
         havgpixelhitcount->Fill(columnNo,rowNo);
         hRocNum->Fill(planeNo);
+        //fill single ROC histograms
+        //first figure out which histogram to fill
+        std::string ipSide;
+        std::string carriageSide;
+        std::string tel;
+        std::string roc;
+        
+        if (pltNo == 0) {
+            ipSide = "MinusZ";
+        }
+        else if (pltNo == 1){
+            ipSide = "PlusZ";
+        }
+        
+        if (halfCarriageNo == 0) {
+            carriageSide = "MinusX";
+        }
+        else if (halfCarriageNo == 1){
+            carriageSide = "PlusX";
+        }
+        ss.str("");
+        ss << telNo;
+        tel = std::string("Tel")+ss.str();
+        
+        ss.str("");
+        ss << planeNo;
+        roc = std::string("ROC")+ss.str();
+        
+        std::string histString = ipSide+"_"+carriageSide+"_"+tel+"_"+roc+"_PixelMap";
+        //finally, fill the proper histogram
+        histMap[histString]->Fill(columnNo,rowNo);
         // three digit address giving side of IP, half carriage, and telescope
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
         // if there hasn't been a hit in that telescope yet
@@ -293,14 +396,117 @@ PLTSimHitAnalyzer::beginJob()
     hparticleeta = fs->make<TH1D>("hparticleeta","Eta of genParticles",200,-6,6);
     hparticlephi = fs->make<TH1D>("hparticlephi","Phi of genParticles within eta=(4.1,4.4)",100,0,3.1416);
     hhitmomentum = fs->make<TH1D>("hhitmomentum","SimHit |p| At Entry",1000,0,1000);
-    havgpixelhitcount = fs->make<TH2D>("havgpixelhitcount","Average Pixel Hit Count",52,-0.5,51.5,80,-0.5,79.5);
+    havgpixelhitcount = fs->make<TH2D>("havgpixelhitcount","Normalized Pixel Hit Count For All ROCs",52,-0.5,51.5,80,-0.5,79.5);
     hRocNum = fs->make<TH1D>("hRocNum","ROC Number Of PSimHit",3,-0.5,2.5);
+    PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel1_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel1_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel1_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel1_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel1_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel1_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel2_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel2_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel2_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel2_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel2_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel2_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel3_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel3_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel3_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel3_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_PlusX_Tel3_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel3_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel1_ROC0_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel1_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel1_ROC1_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel1_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel1_ROC2_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel1_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel2_ROC0_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel2_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel2_ROC1_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel2_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel2_ROC2_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel2_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel3_ROC0_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel3_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel3_ROC1_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel3_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    PlusZ_MinusX_Tel3_ROC2_PixelMap = fs->make<TH2D>("PlusZ_MinusX_Tel3_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    
+    MinusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel1_ROC0_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel1_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel1_ROC1_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel1_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel1_ROC2_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel1_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel2_ROC0_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel2_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel2_ROC1_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel2_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel2_ROC2_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel2_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel3_ROC0_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel3_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel3_ROC1_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel3_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_PlusX_Tel3_ROC2_PixelMap = fs->make<TH2D>("MinusZ_PlusX_Tel3_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel1_ROC0_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel1_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel1_ROC1_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel1_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel1_ROC2_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel1_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel2_ROC0_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel2_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel2_ROC1_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel2_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel2_ROC2_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel2_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel3_ROC0_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel3_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel3_ROC1_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel3_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    MinusZ_MinusX_Tel3_ROC2_PixelMap = fs->make<TH2D>("MinusZ_MinusX_Tel3_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
+    
+    //build the map to elegantly fill the histogram!
+    histMap["PlusZ_PlusX_Tel0_ROC0_PixelMap"] = PlusZ_PlusX_Tel0_ROC0_PixelMap;
+    histMap["PlusZ_PlusX_Tel0_ROC1_PixelMap"] = PlusZ_PlusX_Tel0_ROC1_PixelMap;
+    histMap["PlusZ_PlusX_Tel0_ROC2_PixelMap"] = PlusZ_PlusX_Tel0_ROC2_PixelMap;
+    histMap["PlusZ_PlusX_Tel1_ROC0_PixelMap"] = PlusZ_PlusX_Tel1_ROC0_PixelMap;
+    histMap["PlusZ_PlusX_Tel1_ROC1_PixelMap"] = PlusZ_PlusX_Tel1_ROC1_PixelMap;
+    histMap["PlusZ_PlusX_Tel1_ROC2_PixelMap"] = PlusZ_PlusX_Tel1_ROC2_PixelMap;
+    histMap["PlusZ_PlusX_Tel2_ROC0_PixelMap"] = PlusZ_PlusX_Tel2_ROC0_PixelMap;
+    histMap["PlusZ_PlusX_Tel2_ROC1_PixelMap"] = PlusZ_PlusX_Tel2_ROC1_PixelMap;
+    histMap["PlusZ_PlusX_Tel2_ROC2_PixelMap"] = PlusZ_PlusX_Tel2_ROC2_PixelMap;
+    histMap["PlusZ_PlusX_Tel3_ROC0_PixelMap"] = PlusZ_PlusX_Tel3_ROC0_PixelMap;
+    histMap["PlusZ_PlusX_Tel3_ROC1_PixelMap"] = PlusZ_PlusX_Tel3_ROC1_PixelMap;
+    histMap["PlusZ_PlusX_Tel3_ROC2_PixelMap"] = PlusZ_PlusX_Tel3_ROC2_PixelMap;
+    histMap["PlusZ_MinusX_Tel0_ROC0_PixelMap"] = PlusZ_MinusX_Tel0_ROC0_PixelMap;
+    histMap["PlusZ_MinusX_Tel0_ROC1_PixelMap"] = PlusZ_MinusX_Tel0_ROC1_PixelMap;
+    histMap["PlusZ_MinusX_Tel0_ROC2_PixelMap"] = PlusZ_MinusX_Tel0_ROC2_PixelMap;
+    histMap["PlusZ_MinusX_Tel1_ROC0_PixelMap"] = PlusZ_MinusX_Tel1_ROC0_PixelMap;
+    histMap["PlusZ_MinusX_Tel1_ROC1_PixelMap"] = PlusZ_MinusX_Tel1_ROC1_PixelMap;
+    histMap["PlusZ_MinusX_Tel1_ROC2_PixelMap"] = PlusZ_MinusX_Tel1_ROC2_PixelMap;
+    histMap["PlusZ_MinusX_Tel2_ROC0_PixelMap"] = PlusZ_MinusX_Tel2_ROC0_PixelMap;
+    histMap["PlusZ_MinusX_Tel2_ROC1_PixelMap"] = PlusZ_MinusX_Tel2_ROC1_PixelMap;
+    histMap["PlusZ_MinusX_Tel2_ROC2_PixelMap"] = PlusZ_MinusX_Tel2_ROC2_PixelMap;
+    histMap["PlusZ_MinusX_Tel3_ROC0_PixelMap"] = PlusZ_MinusX_Tel3_ROC0_PixelMap;
+    histMap["PlusZ_MinusX_Tel3_ROC1_PixelMap"] = PlusZ_MinusX_Tel3_ROC1_PixelMap;
+    histMap["PlusZ_MinusX_Tel3_ROC2_PixelMap"] = PlusZ_MinusX_Tel3_ROC2_PixelMap;
+    histMap["MinusZ_PlusX_Tel0_ROC0_PixelMap"] = MinusZ_PlusX_Tel0_ROC0_PixelMap;
+    histMap["MinusZ_PlusX_Tel0_ROC1_PixelMap"] = MinusZ_PlusX_Tel0_ROC1_PixelMap;
+    histMap["MinusZ_PlusX_Tel0_ROC2_PixelMap"] = MinusZ_PlusX_Tel0_ROC2_PixelMap;
+    histMap["MinusZ_PlusX_Tel1_ROC0_PixelMap"] = MinusZ_PlusX_Tel1_ROC0_PixelMap;
+    histMap["MinusZ_PlusX_Tel1_ROC1_PixelMap"] = MinusZ_PlusX_Tel1_ROC1_PixelMap;
+    histMap["MinusZ_PlusX_Tel1_ROC2_PixelMap"] = MinusZ_PlusX_Tel1_ROC2_PixelMap;
+    histMap["MinusZ_PlusX_Tel2_ROC0_PixelMap"] = MinusZ_PlusX_Tel2_ROC0_PixelMap;
+    histMap["MinusZ_PlusX_Tel2_ROC1_PixelMap"] = MinusZ_PlusX_Tel2_ROC1_PixelMap;
+    histMap["MinusZ_PlusX_Tel2_ROC2_PixelMap"] = MinusZ_PlusX_Tel2_ROC2_PixelMap;
+    histMap["MinusZ_PlusX_Tel3_ROC0_PixelMap"] = MinusZ_PlusX_Tel3_ROC0_PixelMap;
+    histMap["MinusZ_PlusX_Tel3_ROC1_PixelMap"] = MinusZ_PlusX_Tel3_ROC1_PixelMap;
+    histMap["MinusZ_PlusX_Tel3_ROC2_PixelMap"] = MinusZ_PlusX_Tel3_ROC2_PixelMap;
+    histMap["MinusZ_MinusX_Tel0_ROC0_PixelMap"] = MinusZ_MinusX_Tel0_ROC0_PixelMap;
+    histMap["MinusZ_MinusX_Tel0_ROC1_PixelMap"] = MinusZ_MinusX_Tel0_ROC1_PixelMap;
+    histMap["MinusZ_MinusX_Tel0_ROC2_PixelMap"] = MinusZ_MinusX_Tel0_ROC2_PixelMap;
+    histMap["MinusZ_MinusX_Tel1_ROC0_PixelMap"] = MinusZ_MinusX_Tel1_ROC0_PixelMap;
+    histMap["MinusZ_MinusX_Tel1_ROC1_PixelMap"] = MinusZ_MinusX_Tel1_ROC1_PixelMap;
+    histMap["MinusZ_MinusX_Tel1_ROC2_PixelMap"] = MinusZ_MinusX_Tel1_ROC2_PixelMap;
+    histMap["MinusZ_MinusX_Tel2_ROC0_PixelMap"] = MinusZ_MinusX_Tel2_ROC0_PixelMap;
+    histMap["MinusZ_MinusX_Tel2_ROC1_PixelMap"] = MinusZ_MinusX_Tel2_ROC1_PixelMap;
+    histMap["MinusZ_MinusX_Tel2_ROC2_PixelMap"] = MinusZ_MinusX_Tel2_ROC2_PixelMap;
+    histMap["MinusZ_MinusX_Tel3_ROC0_PixelMap"] = MinusZ_MinusX_Tel3_ROC0_PixelMap;
+    histMap["MinusZ_MinusX_Tel3_ROC1_PixelMap"] = MinusZ_MinusX_Tel3_ROC1_PixelMap;
+    histMap["MinusZ_MinusX_Tel3_ROC2_PixelMap"] = MinusZ_MinusX_Tel3_ROC2_PixelMap;
+    
+    
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
 void 
 PLTSimHitAnalyzer::endJob() 
 {
+    double entries = havgpixelhitcount->GetEntries();
+    havgpixelhitcount->Scale(1./entries);
     std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 }
 
