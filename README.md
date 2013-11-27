@@ -1,4 +1,4 @@
-PLTCode
+PLT Simulation Software
 =======
 
 Code created for Pixel Luminosity Telescope (PLT) software development
