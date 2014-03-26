@@ -217,6 +217,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //std::cout << "HIT!!!" << std::endl;
         double mom = iHit->pabs();
         int detid = iHit->detUnitId();
+        //cout << "hit detid: " << detid << endl;
         hdetid->Fill(detid);
         std::stringstream ss;
         ss << detid;
