@@ -47,6 +47,7 @@
 #include <sstream>
 #include <vector>
 #include <cstdlib>
+#include <fstream>
 
 //
 // class declaration
@@ -77,6 +78,7 @@ private:
     TH1D* heta;
     TH1D* htof;
     TH1D* heloss;
+    TH1D* helossPlane;
     TH1D* htel3fold;
     TH1D* hdetid;
     TH1D* hparticlephi;
@@ -154,6 +156,8 @@ private:
     
     std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
+    std::ofstream hitInfo;
+    std::string digiFileName;
     
 };
 
@@ -173,7 +177,9 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 {
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
+    digiFileName = iConfig.getParameter<std::string>("digiFileName");
     threeFoldCount = 0;
+    hitInfo.open(digiFileName);
     
 }
 
@@ -183,6 +189,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
+    hitInfo.close();
     
 }
 
@@ -206,6 +213,10 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     
     //keeps track of hit locations to easily count 3-fold coincidences
     std::map< int,std::vector<int> > hitTracker;
+    std::map< int,double > energyTracker;
+    energyTracker[0]=0.;
+    energyTracker[1]=0.;
+    energyTracker[2]=0.;
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
         hparticleeta->Fill(particleEta);
@@ -345,12 +356,21 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         htheta->Fill(theta);
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
-        heloss->Fill(iHit->energyLoss());
+        heloss->Fill(1000000*iHit->energyLoss()); //plot in keV 
+        energyTracker[planeNo] += iHit->energyLoss();
         //        std::cout << " " << std::endl;
         //        std::cout << "PDGID: " << iHit->particleType() << std::endl;
         //        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
         //        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
         //        std::cout << " " << std::endl;
+        int channelNum = 100*pltNo+10*halfCarriageNo+telNo;
+        double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
+        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << adc << "\n";
+    }
+    for(int i = 0; i != 3; i++){
+        double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV
+        if (planeEnergy > 0.)
+            helossPlane->Fill( planeEnergy );
     }
     //loop through the hit tracker to see if there are any 3-fold coincidences
     for (std::map< int , std::vector<int> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
@@ -388,10 +408,11 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 void 
 PLTSimHitAnalyzer::beginJob()
 {
-    htheta = fs->make<TH1D>("htheta","Particle Theta", 1000,-4,4);
+    htheta = fs->make<TH1D>("htheta","Particle Theta", 300,0,3.1416);
     heta = fs->make<TH1D>("heta","Particle Eta",1000,-5,5);
     htof = fs->make<TH1D>("htof","Time of Flight from IP (ns)",100,0,25);
-    heloss = fs->make<TH1D>("heloss","Energy Loss",100,0,1);
+    heloss = fs->make<TH1D>("heloss","Energy Loss",500,0,500);
+    helossPlane = fs->make<TH1D>("helossPlane","Energy Loss",500,0,500);
     htel3fold = fs->make<TH1D>("htel3fold","Three-Fold Coincidences By Telescope",114,-0.5,113);
     hdetid = fs->make<TH1D>("hdetid","Det ID of PSimHits",11330000,-0.5,11329999);
     hparticleeta = fs->make<TH1D>("hparticleeta","Eta of genParticles",200,-6,6);
@@ -508,7 +529,7 @@ PLTSimHitAnalyzer::endJob()
 {
     double entries = havgpixelhitcount->GetEntries();
     havgpixelhitcount->Scale(1./entries);
-    std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
+    //std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 }
 
 // ------------ method called when starting to processes a run  ------------

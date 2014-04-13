@@ -24,26 +24,20 @@ process.MessageLogger.cerr.FwkReport.reportEvery = 1
 
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxEvents) )
 
-#files located at FNAL
-process.source = cms.Source("PoolSource",
-                    fileNames = cms.untracked.vstring(
-                    	'/store/user/skaplan/MinBiasTestEvents/PLTMinBiasEvents_NoPileUp_1.root',
-                    	'/store/user/skaplan/MinBiasTestEvents/PLTMinBiasEvents_NoPileUp_2.root',
-
-					),
-					#duplicate event/lumisection numbers are ok (different random seeds)
-					duplicateCheckMode = cms.untracked.string('noDuplicateCheck')
-
-)
+#source files
+process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
+# process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
 
 
 process.TFileService = cms.Service("TFileService",
 fileName = cms.string(options.outfilename)
 )
 
+digifilename = options.outfilename[:-5]+"_digioutput.txt"
 process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 #feed this into .cc file
-PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM")
+PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
+digiFileName = cms.string(digifilename)
 )
 
 
