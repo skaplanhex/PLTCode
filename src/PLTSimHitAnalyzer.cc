@@ -365,7 +365,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << " " << std::endl;
         int channelNum = 100*pltNo+10*halfCarriageNo+telNo;
         double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << adc << "\n";
+        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << "\n";
     }
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV
