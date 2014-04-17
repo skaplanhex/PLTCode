@@ -157,6 +157,7 @@ private:
     std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
     std::ofstream hitInfo;
+    std::ofstream hitInfo_ThreeFold;
     std::string digiFileName;
     
 };
@@ -179,7 +180,9 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
     digiFileName = iConfig.getParameter<std::string>("digiFileName");
     threeFoldCount = 0;
-    hitInfo.open(digiFileName);
+    //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
+    hitInfo.open(digiFileName+".txt");
+    // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     
 }
 
@@ -205,10 +208,10 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     using namespace edm;
     using namespace std;
     
-    Handle<PSimHitContainer> simHitHandle;
+    edm::Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
     
-    Handle< std::vector< reco::GenParticle > > particleHandle;
+    edm::Handle< std::vector< reco::GenParticle > > particleHandle;
     iEvent.getByLabel("genParticles",particleHandle);
     
     //keeps track of hit locations to easily count 3-fold coincidences

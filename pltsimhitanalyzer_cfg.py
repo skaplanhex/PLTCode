@@ -33,7 +33,8 @@ process.TFileService = cms.Service("TFileService",
 fileName = cms.string(options.outfilename)
 )
 
-digifilename = options.outfilename[:-5]+"_digioutput.txt"
+#file name of digi output. The file endings will be added in the analyzer (as the base name is used more than once)
+digifilename = options.outfilename[:-5]+"_digioutput"
 process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 #feed this into .cc file
 PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
