@@ -70,6 +70,8 @@ private:
     virtual void endRun(edm::Run const&, edm::EventSetup const&);
     virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&);
     virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&);
+    virtual std::vector<int> analyzeDetId(int);
+    virtual int getChannel(int,int,int);
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
@@ -159,6 +161,7 @@ private:
     std::ofstream hitInfo;
     std::ofstream hitInfo_ThreeFold;
     std::string digiFileName;
+    long eventCounter;
     
 };
 
@@ -183,6 +186,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     hitInfo.open(digiFileName+".txt");
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
+    eventCounter = 0;
     
 }
 
@@ -200,6 +204,166 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
 //
 // member functions
 //
+std::vector<int>
+PLTSimHitAnalyzer::analyzeDetId(int detid){
+    std::stringstream ss;
+    ss << detid;
+    std::string detidstring = ss.str();
+    int detidsize = detidstring.size();
+    //since many identifiers can be zero, the size of the integer can vary! Need to switch on all possible sizes to determine the identifiers from the detid.
+    
+    //There needs to be a more elegant way to do this...
+    int pltNo = -1;
+    int halfCarriageNo = -1;
+    int telNo = -1;
+    int planeNo = -1;
+    int rowNo = -1;
+    int columnNo = -1;
+    
+    if (detidsize == 1 || detidsize == 2) {
+        pltNo = 0;
+        halfCarriageNo = 0;
+        telNo = 0;
+        planeNo = 0;
+        rowNo = 0;
+        columnNo = detid;
+    }
+    else if (detidsize == 3 || detidsize == 4){
+        pltNo = 0;
+        halfCarriageNo = 0;
+        telNo = 0;
+        planeNo = 0;
+        rowNo = (detid - (detid % 100))/100;
+        columnNo = detid % 100;
+    }
+    else if (detidsize == 5){
+        pltNo = 0;
+        halfCarriageNo = 0;
+        telNo = 0;
+        planeNo = (detid - (detid % 10000))/10000;
+        rowNo = ((detid % 10000)-(detid % 100))/100;
+        columnNo = detid % 100;
+    }
+    else if (detidsize == 6){
+        pltNo = 0;
+        halfCarriageNo = 0;
+        telNo = (detid - (detid % 100000))/100000;
+        planeNo = ((detid - (100000*telNo)) - (detid % 10000))/10000;
+        rowNo = ((detid % 10000)-(detid % 100))/100;
+        columnNo = detid % 100;
+    }
+    else if (detidsize == 7){
+        pltNo = 0;
+        halfCarriageNo = (detid - (detid % 1000000))/1000000;
+        telNo = ((detid - (1000000*halfCarriageNo)) - (detid % 100000))/100000;
+        planeNo = (detid-(1000000*halfCarriageNo)-(100000*telNo)-(detid % 10000))/10000;
+        rowNo = ((detid % 10000)-(detid % 100))/100;
+        columnNo = detid % 100;
+    }
+    else if (detidsize == 8){
+        int temp [8];
+        //fill array with digits in detid and use the array for the various ids
+        for(int i =0; i<8; i++){
+            char aChar = detidstring.at(i);
+            int anInt = atoi(&aChar); //convert char to int
+            temp[i] = anInt;
+        }
+        pltNo = temp[0];
+        halfCarriageNo = temp[1];
+        telNo = temp[2];
+        planeNo = temp[3];
+        rowNo = 10*temp[4]+temp[5];
+        columnNo = 10*temp[6]+temp[7];
+    }
+    else{
+        std::cout << "DETID = " << detid << " NOT EXPECTED!! INVESTIGATE!!" << std::endl;
+    }
+    if (pltNo == -1 || halfCarriageNo == -1 || telNo == -1 || planeNo == -1 || rowNo == -1 || columnNo == -1) {
+        std::cout << "ONE OF THE ELEMENTS WEREN'T SET CORRECTLY FOR DETID = " << detid << ". INVESTIGATE!!!" << std::endl;
+    }
+    std::vector<int> infoVector;
+    infoVector.push_back(pltNo);
+    infoVector.push_back(halfCarriageNo);
+    infoVector.push_back(telNo);
+    infoVector.push_back(planeNo);
+    infoVector.push_back(rowNo);
+    infoVector.push_back(columnNo);
+    return infoVector;
+}
+
+int
+PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
+    int channelNum = -1;
+    if(pltNum == 0){
+        if(halfCarriageNum == 0){
+            switch(telNum){
+                case 0:
+                    channelNum = 1;
+                    break;
+                case 1:
+                    channelNum = 2;
+                    break;
+                case 2:
+                    channelNum = 3;
+                    break;
+                case 3:
+                    channelNum = 4;
+                    break;
+            }
+        }
+        else{
+            switch(telNum){
+                case 0:
+                    channelNum = 5;
+                    break;
+                case 1:
+                    channelNum = 6;
+                    break;
+                case 2:
+                    channelNum = 7;
+                    break;
+                case 3:
+                    channelNum = 8;
+                    break;
+            }
+        }
+    }
+    else{
+        if(halfCarriageNum == 0){
+            switch(telNum){
+                case 0:
+                    channelNum = 9;
+                    break;
+                case 1:
+                    channelNum = 10;
+                    break;
+                case 2:
+                    channelNum = 11;
+                    break;
+                case 3:
+                    channelNum = 12;
+                    break;
+            }
+        }
+        else{
+            switch(telNum){
+                case 0:
+                    channelNum = 13;
+                    break;
+                case 1:
+                    channelNum = 14;
+                    break;
+                case 2:
+                    channelNum = 15;
+                    break;
+                case 3:
+                    channelNum = 16;
+                    break;
+            }
+        }
+    }
+    return channelNum;
+}
 
 // ------------ method called for each event  ------------
 void
@@ -207,6 +371,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 {
     using namespace edm;
     using namespace std;
+
+    eventCounter++;
     
     edm::Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
@@ -233,85 +399,18 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         int detid = iHit->detUnitId();
         //cout << "hit detid: " << detid << endl;
         hdetid->Fill(detid);
+
+        //analyze detid to get position of hit in the PLT
+        std::vector<int> infoVector = analyzeDetId(detid);
+        int pltNo = infoVector.at(0);
+        int halfCarriageNo = infoVector.at(1);
+        int telNo = infoVector.at(2);
+        int planeNo = infoVector.at(3);
+        int rowNo = infoVector.at(4);
+        int columnNo = infoVector.at(5);
+
+        //Fill single ROC histograms
         std::stringstream ss;
-        ss << detid;
-        std::string detidstring = ss.str();
-        int detidsize = detidstring.size();
-        //since many identifiers can be zero, the size of the integer can vary! Need to switch on all possible sizes to determine the identifiers from the detid.
-        
-        //There needs to be a more elegant way to do this...
-        int pltNo = -1;
-        int halfCarriageNo = -1;
-        int telNo = -1;
-        int planeNo = -1;
-        int rowNo = -1;
-        int columnNo = -1;
-        
-        if (detidsize == 1 || detidsize == 2) {
-            pltNo = 0;
-            halfCarriageNo = 0;
-            telNo = 0;
-            planeNo = 0;
-            rowNo = 0;
-            columnNo = detid;
-        }
-        else if (detidsize == 3 || detidsize == 4){
-            pltNo = 0;
-            halfCarriageNo = 0;
-            telNo = 0;
-            planeNo = 0;
-            rowNo = (detid - (detid % 100))/100;
-            columnNo = detid % 100;
-        }
-        else if (detidsize == 5){
-            pltNo = 0;
-            halfCarriageNo = 0;
-            telNo = 0;
-            planeNo = (detid - (detid % 10000))/10000;
-            rowNo = ((detid % 10000)-(detid % 100))/100;
-            columnNo = detid % 100;
-        }
-        else if (detidsize == 6){
-            pltNo = 0;
-            halfCarriageNo = 0;
-            telNo = (detid - (detid % 100000))/100000;
-            planeNo = ((detid - (100000*telNo)) - (detid % 10000))/10000;
-            rowNo = ((detid % 10000)-(detid % 100))/100;
-            columnNo = detid % 100;
-        }
-        else if (detidsize == 7){
-            pltNo = 0;
-            halfCarriageNo = (detid - (detid % 1000000))/1000000;
-            telNo = ((detid - (1000000*halfCarriageNo)) - (detid % 100000))/100000;
-            planeNo = (detid-(1000000*halfCarriageNo)-(100000*telNo)-(detid % 10000))/10000;
-            rowNo = ((detid % 10000)-(detid % 100))/100;
-            columnNo = detid % 100;
-        }
-        else if (detidsize == 8){
-            int temp [8];
-            //fill array with digits in detid and use the array for the various ids
-            for(int i =0; i<8; i++){
-                char aChar = detidstring.at(i);
-                int anInt = atoi(&aChar); //convert char to int
-                temp[i] = anInt;
-            }
-            pltNo = temp[0];
-            halfCarriageNo = temp[1];
-            telNo = temp[2];
-            planeNo = temp[3];
-            rowNo = 10*temp[4]+temp[5];
-            columnNo = 10*temp[6]+temp[7];
-        }
-        else{
-            std::cout << "DETID = " << detid << " NOT EXPECTED!! INVESTIGATE!!" << std::endl;
-        }
-        if (pltNo == -1 || halfCarriageNo == -1 || telNo == -1 || planeNo == -1 || rowNo == -1 || columnNo == -1) {
-            std::cout << "ONE OF THE ELEMENTS WEREN'T SET CORRECTLY FOR DETID = " << detid << ". INVESTIGATE!!!" << std::endl;
-        }
-        havgpixelhitcount->Fill(columnNo,rowNo);
-        hRocNum->Fill(planeNo);
-        //fill single ROC histograms
-        //first figure out which histogram to fill
         std::string ipSide;
         std::string carriageSide;
         std::string tel;
@@ -341,6 +440,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         std::string histString = ipSide+"_"+carriageSide+"_"+tel+"_"+roc+"_PixelMap";
         //finally, fill the proper histogram
         histMap[histString]->Fill(columnNo,rowNo);
+        //fill histograms for each roc
+        havgpixelhitcount->Fill(columnNo,rowNo);
+        hRocNum->Fill(planeNo);
         // three digit address giving side of IP, half carriage, and telescope
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
         // if there hasn't been a hit in that telescope yet
@@ -366,9 +468,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
         //        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
         //        std::cout << " " << std::endl;
-        int channelNum = 100*pltNo+10*halfCarriageNo+telNo;
+        int channelNum = getChannel(pltNo,halfCarriageNo,telNo);
         double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << "\n";
+        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
     }
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV

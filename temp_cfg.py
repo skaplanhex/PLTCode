@@ -24,25 +24,25 @@ process.MessageLogger.cerr.FwkReport.reportEvery = 1
 
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxEvents) )
 
-#source files
-process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
-# process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
-# process.source = cms.Source("PoolSource",
-# 		fileNames = cms.untracked.vstring(
-# 			"/store/user/skaplan/MinBiasPileUpOfficial/outfile_123_1_2Ls.root"
-# 		)
-# )
+#files located at FNAL
+process.source = cms.Source("PoolSource",
+                    fileNames = cms.untracked.vstring(
+                    	"file:/uscms/home/skaplan/nobackup/PLT/sim/CMSSW_7_1_0_pre4/src/newmuonevents.root"
+
+					),
+					#duplicate event/lumisection numbers are ok (different random seeds)
+					duplicateCheckMode = cms.untracked.string('noDuplicateCheck')
+
+)
+
 
 process.TFileService = cms.Service("TFileService",
 fileName = cms.string(options.outfilename)
 )
 
-#file name of digi output. The file endings will be added in the analyzer (as the base name is used more than once)
-digifilename = options.outfilename[:-5]+"_digioutput"
 process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 #feed this into .cc file
-PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
-digiFileName = cms.string(digifilename)
+PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM")
 )
 
 
