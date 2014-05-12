@@ -161,6 +161,7 @@ private:
     std::ofstream hitInfo;
     std::ofstream hitInfo_ThreeFold;
     std::string digiFileName;
+    int threshold;
     long eventCounter;
     
 };
@@ -182,6 +183,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
     digiFileName = iConfig.getParameter<std::string>("digiFileName");
+    threshold = iConfig.getParameter<int>("threshold");
     threeFoldCount = 0;
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     hitInfo.open(digiFileName+".txt");
@@ -470,7 +472,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << " " << std::endl;
         int channelNum = getChannel(pltNo,halfCarriageNo,telNo);
         double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
+        if (adc > threshold)
+            hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
     }
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV
