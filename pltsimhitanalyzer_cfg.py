@@ -42,7 +42,7 @@ digifilename = options.outfilename[:-5]+"_digioutput"
 process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#feed this into .cc file
 	PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
-	digiFileName = cms.string(digifilename),
+	#digiFileName = cms.string(digifilename),
 	threshold = cms.int32(4000)
 )
 

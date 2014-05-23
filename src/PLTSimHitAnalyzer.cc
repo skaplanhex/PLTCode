@@ -34,6 +34,8 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
+#include "SimDataFormats/Vertex/interface/SimVertex.h"
+
 
 #include "DataFormats/Candidate/interface/Candidate.h"
 #include "DataFormats/Candidate/interface/CandidateFwd.h"
@@ -88,6 +90,7 @@ private:
     TH1D* hhitmomentum;
     TH2D* havgpixelhitcount;
     TH1D* hRocNum;
+    TH1D* simVertexMult;
     
     //pixel maps
     TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
@@ -160,6 +163,7 @@ private:
     int threeFoldCount;
     std::ofstream hitInfo;
     std::ofstream hitInfo_ThreeFold;
+    bool inDigiMode;
     std::string digiFileName;
     int threshold;
     long eventCounter;
@@ -182,11 +186,12 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 {
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
-    digiFileName = iConfig.getParameter<std::string>("digiFileName");
+    inDigiMode = iConfig.exists("digiFileName");
+    if (inDigiMode) digiFileName = iConfig.getParameter<std::string>("digiFileName");
     threshold = iConfig.getParameter<int>("threshold");
     threeFoldCount = 0;
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
-    hitInfo.open(digiFileName+".txt");
+    if (inDigiMode) hitInfo.open(digiFileName+".txt");
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     eventCounter = 0;
     
@@ -198,7 +203,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
-    hitInfo.close();
+    if (inDigiMode) hitInfo.close();
     
 }
 
@@ -381,7 +386,13 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     
     edm::Handle< std::vector< reco::GenParticle > > particleHandle;
     iEvent.getByLabel("genParticles",particleHandle);
-    
+
+    edm::Handle< std::vector< SimVertex > > vertexHandle;
+    iEvent.getByLabel("g4SimHits",vertexHandle);
+
+    //make vertex multiplicity plot
+    simVertexMult->Fill(vertexHandle->size());
+
     //keeps track of hit locations to easily count 3-fold coincidences
     std::map< int,std::vector<int> > hitTracker;
     std::map< int,double > energyTracker;
@@ -472,7 +483,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << " " << std::endl;
         int channelNum = getChannel(pltNo,halfCarriageNo,telNo);
         double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        if (adc > threshold)
+        if ( (adc > threshold) && inDigiMode )
             hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
     }
     for(int i = 0; i != 3; i++){
@@ -528,6 +539,7 @@ PLTSimHitAnalyzer::beginJob()
     hhitmomentum = fs->make<TH1D>("hhitmomentum","SimHit |p| At Entry",1000,0,1000);
     havgpixelhitcount = fs->make<TH2D>("havgpixelhitcount","Normalized Pixel Hit Count For All ROCs",52,-0.5,51.5,80,-0.5,79.5);
     hRocNum = fs->make<TH1D>("hRocNum","ROC Number Of PSimHit",3,-0.5,2.5);
+    simVertexMult = fs->make<TH1D>("simVertexMult","SimVertex Multiplicity",101,-0.5,100.5);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
