@@ -25,13 +25,14 @@ process.MessageLogger.cerr.FwkReport.reportEvery = 1
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxEvents) )
 
 #source files
-process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
+# process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
 # process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
-# process.source = cms.Source("PoolSource",
-# 		fileNames = cms.untracked.vstring(
-# 			"/store/user/skaplan/MinBiasPileUpOfficial/outfile_123_1_2Ls.root"
-# 		)
-# )
+process.source = cms.Source("PoolSource",
+		fileNames = cms.untracked.vstring(
+			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
+			'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_1_1_Ooy.root'
+		)
+)
 
 process.TFileService = cms.Service("TFileService",
 fileName = cms.string(options.outfilename)
@@ -43,7 +44,8 @@ process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#feed this into .cc file
 	PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
 	#digiFileName = cms.string(digifilename),
-	threshold = cms.int32(4000)
+	#doPileup = cms.bool(True),
+	#threshold = cms.int32(4000),
 )
 
 

@@ -35,6 +35,7 @@
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
 #include "SimDataFormats/Vertex/interface/SimVertex.h"
+#include "DataFormats/VertexReco/interface/Vertex.h"
 
 
 #include "DataFormats/Candidate/interface/Candidate.h"
@@ -74,6 +75,7 @@ private:
     virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&);
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
+    virtual int getPUEventNumber(int, int);
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
@@ -164,9 +166,13 @@ private:
     std::ofstream hitInfo;
     std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
+    bool doPileup;
     std::string digiFileName;
     int threshold;
     long eventCounter;
+    std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
+    std::map< int,int > threeFoldMap; //for 3-fold coincidences in different pileup scenarios
+    typedef std::map<int,std::ofstream*>::iterator puIter;
     
 };
 
@@ -186,14 +192,34 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 {
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
-    inDigiMode = iConfig.exists("digiFileName");
+    inDigiMode = iConfig.exists("digiFileName") && iConfig.exists("threshold");
+    if ( (!iConfig.exists("digiFileName") && iConfig.exists("threshold")) || (iConfig.exists("digiFileName") && !iConfig.exists("threshold")) )
+        throw cms::Exception("DigiIssue") << "Digi mode not set up properly. Make sure BOTH digiFileName AND threshold are both set!\n";
+    doPileup = (iConfig.exists("doPileup") ? iConfig.getParameter<bool>("doPileup") : false);
+    if ( doPileup && (!inDigiMode) ){ //for the case that neither digiFileName nor threshold are set, but doPileup is set to true
+        throw cms::Exception("PileupIssue") << "Digi mode not set up properly. Make sure BOTH digiFileName AND threshold are both set!\n";
+    }
     if (inDigiMode) digiFileName = iConfig.getParameter<std::string>("digiFileName");
-    threshold = iConfig.getParameter<int>("threshold");
+    if (inDigiMode) threshold = iConfig.getParameter<int>("threshold");
     threeFoldCount = 0;
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     if (inDigiMode) hitInfo.open(digiFileName+".txt");
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     eventCounter = 0;
+
+    //pileup stuff
+    if (doPileup){
+        
+        puMap[5] = new std::ofstream(digiFileName+"_PU5.txt");
+        puMap[10] = new std::ofstream(digiFileName+"_PU10.txt");
+        puMap[15] = new std::ofstream(digiFileName+"_PU15.txt");
+        puMap[20] = new std::ofstream(digiFileName+"_PU20.txt");
+        puMap[25] = new std::ofstream(digiFileName+"_PU25.txt");
+        puMap[30] = new std::ofstream(digiFileName+"_PU30.txt");
+        puMap[35] = new std::ofstream(digiFileName+"_PU35.txt");
+        puMap[40] = new std::ofstream(digiFileName+"_PU40.txt");
+
+    }
     
 }
 
@@ -204,6 +230,11 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode) hitInfo.close();
+    if (doPileup){
+        for(puIter it = puMap.begin(); it != puMap.end(); ++it){
+            it->second->close();
+        }
+    }
     
 }
 
@@ -371,6 +402,15 @@ PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
     }
     return channelNum;
 }
+//every event number will be either a "signal" MinBias event or a "pileup" MinBias event -- figure out which signal event each event number corresponds to
+int
+PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){ 
+    double ratio = (1.0*actualEventNum)/(1.0*(numPileupEvents+1));
+    int event = static_cast<int>(ratio+1.);
+    if ( ratio == 1.0*(event-1.) )
+        event--;
+    return event;
+}
 
 // ------------ method called for each event  ------------
 void
@@ -387,11 +427,11 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     edm::Handle< std::vector< reco::GenParticle > > particleHandle;
     iEvent.getByLabel("genParticles",particleHandle);
 
-    edm::Handle< std::vector< SimVertex > > vertexHandle;
-    iEvent.getByLabel("g4SimHits",vertexHandle);
+    // edm::Handle< std::vector< reco::Vertex > > vertexHandle;
+    // iEvent.getByLabel("offlinePrimaryVertices",vertexHandle);
 
-    //make vertex multiplicity plot
-    simVertexMult->Fill(vertexHandle->size());
+    // //make vertex multiplicity plot
+    // simVertexMult->Fill(vertexHandle->size());
 
     //keeps track of hit locations to easily count 3-fold coincidences
     std::map< int,std::vector<int> > hitTracker;
@@ -483,9 +523,20 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << " " << std::endl;
         int channelNum = getChannel(pltNo,halfCarriageNo,telNo);
         double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        if ( (adc > threshold) && inDigiMode )
+        if ( (adc > threshold) && inDigiMode ){
+            //fill the normal digi output
             hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
-    }
+
+            //fill the pileup output if desired
+            if(doPileup){
+                //for each pileup scenario
+                for(puIter it = puMap.begin(); it != puMap.end(); ++it){
+                    int numPU = it->first;
+                    ( *(it->second) ) << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << getPUEventNumber(eventCounter,numPU) << "\n";
+                }
+            }
+        }
+    }//end loop over PLT hits
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV
         if (planeEnergy > 0.)
