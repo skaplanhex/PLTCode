@@ -52,6 +52,9 @@
 #include <cstdlib>
 #include <fstream>
 
+using namespace edm;
+using namespace std;
+
 //
 // class declaration
 //
@@ -164,12 +167,17 @@ private:
     std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
     std::ofstream hitInfo;
-    std::ofstream hitInfo_ThreeFold;
+    std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
+    //std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
     bool doPileup;
+    bool doBeamspotStudy;
+    bool phiAtZero;
+    int r;
     std::string digiFileName;
     int threshold;
     long eventCounter;
+    int eventsWithThreeFoldCoin;
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
     std::map< int,int > threeFoldMap; //for 3-fold coincidences in different pileup scenarios
     typedef std::map<int,std::ofstream*>::iterator puIter;
@@ -201,11 +209,26 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     }
     if (inDigiMode) digiFileName = iConfig.getParameter<std::string>("digiFileName");
     if (inDigiMode) threshold = iConfig.getParameter<int>("threshold");
+    doBeamspotStudy = (iConfig.exists("doBeamspotStudy") ? iConfig.getParameter<bool>("doBeamspotStudy") : false);
+    phiAtZero = (iConfig.exists("phiAtZero") ? iConfig.getParameter<bool>("phiAtZero") : true);
+    r = (iConfig.exists("r") ? iConfig.getParameter<int>("r") : 0);
+    if( (doBeamspotStudy) && ( !iConfig.exists("r") || !iConfig.exists("phiAtZero") )  ) //if both r and phiAtZero are not passed if doing beamspot study
+        throw cms::Exception("BeamSpotIssue") << "BeamSpot mode not set up properly. Make sure BOTH phiAtZero AND r are both set!\n";
     threeFoldCount = 0;
+
+    //print options to screen
+    std::cout << "PLTSimHitAnalyzer run with the following options:\n" << std::endl;
+    std::cout << "inDigiMode = " << inDigiMode << std::endl;
+    std::cout << "doPileup = " << doPileup << std::endl;
+    std::cout << "doBeamspotStudy = " << doBeamspotStudy << std::endl;
+
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     if (inDigiMode) hitInfo.open(digiFileName+".txt");
+    //open in append mode 
+    if (doBeamspotStudy) beamspotInfo.open("PLTBeamspotInfo.txt", ios::app);
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     eventCounter = 0;
+    eventsWithThreeFoldCoin = 0;
 
     //pileup stuff
     if (doPileup){
@@ -235,6 +258,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
             it->second->close();
         }
     }
+    if (doBeamspotStudy) beamspotInfo.close();
     
 }
 
@@ -416,8 +440,6 @@ PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){
 void
 PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
-    using namespace edm;
-    using namespace std;
 
     eventCounter++;
     
@@ -568,6 +590,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             if (existsThreeFoldCoin) {
                 htel3fold->Fill(iTel->first);
                 threeFoldCount++;
+                eventsWithThreeFoldCoin++;
             }
         } //end else statement (telescopes with at least three hits)
     }//end loop over telescopes
@@ -700,6 +723,15 @@ PLTSimHitAnalyzer::endJob()
 {
     double entries = havgpixelhitcount->GetEntries();
     havgpixelhitcount->Scale(1./entries);
+    double acceptance = (1.*eventsWithThreeFoldCoin)/(1.*eventCounter);
+    if (doBeamspotStudy){
+        std::cout << "************BeamSpot Study Results**********" << std::endl;
+        std::cout << "Number of events with 3-fold coincidences: " << eventsWithThreeFoldCoin << std::endl;
+        std::cout << "Number of total events: " << eventCounter << std::endl;
+        std::cout << "---> acceptance = " << acceptance << std::endl;
+        std::cout << "This information is now being recorded in the text file." << std::endl;
+        beamspotInfo << phiAtZero << " " << r << " " <<  eventsWithThreeFoldCoin << " " <<  eventCounter << " " << acceptance <<  "\n";
+    }
     //std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 }
 
