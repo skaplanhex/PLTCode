@@ -51,6 +51,8 @@
 #include <vector>
 #include <cstdlib>
 #include <fstream>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/classification.hpp>
 
 using namespace edm;
 using namespace std;
@@ -81,6 +83,7 @@ private:
     virtual int getPUEventNumber(int, int);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
+    virtual void runPileupAnalysis();
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
@@ -182,6 +185,8 @@ private:
     long eventCounter;
     int eventsWithThreeFoldCoin;
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
+    std::map< int,std::string > puFilenameMap;
+    std::map< int,double > puAccepMap;
     std::map< int,int > threeFoldMap; //for 3-fold coincidences in different pileup scenarios
     typedef std::map<int,std::ofstream*>::iterator puIter;
     
@@ -246,15 +251,24 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 
     //pileup stuff
     if (doPileup){
+
+        puFilenameMap[5] = digiFileName+"_PU5.txt";
+        puFilenameMap[10] = digiFileName+"_PU10.txt";
+        puFilenameMap[15] = digiFileName+"_PU15.txt";
+        puFilenameMap[20] = digiFileName+"_PU20.txt";
+        puFilenameMap[25] = digiFileName+"_PU25.txt";
+        puFilenameMap[30] = digiFileName+"_PU30.txt";
+        puFilenameMap[35] = digiFileName+"_PU35.txt";
+        puFilenameMap[40] = digiFileName+"_PU40.txt";
         
-        puMap[5] = new std::ofstream(digiFileName+"_PU5.txt");
-        puMap[10] = new std::ofstream(digiFileName+"_PU10.txt");
-        puMap[15] = new std::ofstream(digiFileName+"_PU15.txt");
-        puMap[20] = new std::ofstream(digiFileName+"_PU20.txt");
-        puMap[25] = new std::ofstream(digiFileName+"_PU25.txt");
-        puMap[30] = new std::ofstream(digiFileName+"_PU30.txt");
-        puMap[35] = new std::ofstream(digiFileName+"_PU35.txt");
-        puMap[40] = new std::ofstream(digiFileName+"_PU40.txt");
+        puMap[5] = new std::ofstream(puFilenameMap[5]);
+        puMap[10] = new std::ofstream(puFilenameMap[10]);
+        puMap[15] = new std::ofstream(puFilenameMap[15]);
+        puMap[20] = new std::ofstream(puFilenameMap[20]);
+        puMap[25] = new std::ofstream(puFilenameMap[25]);
+        puMap[30] = new std::ofstream(puFilenameMap[30]);
+        puMap[35] = new std::ofstream(puFilenameMap[35]);
+        puMap[40] = new std::ofstream(puFilenameMap[40]);
 
     }
     
@@ -267,11 +281,6 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode) hitInfo.close();
-    if (doPileup){
-        for(puIter it = puMap.begin(); it != puMap.end(); ++it){
-            it->second->close();
-        }
-    }
     if (doBeamspotStudy) beamspotInfo.close();
     
 }
@@ -797,6 +806,28 @@ PLTSimHitAnalyzer::beginJob()
     
     
 }
+void
+PLTSimHitAnalyzer::runPileupAnalysis(){
+    using namespace boost::algorithm;
+    //loop over puMap
+    for(std::map<int,std::string>::const_iterator it = puFilenameMap.begin(); it != puFilenameMap.end(); ++it){
+        //int numPu = it->first;
+        std::ifstream in(it->second);
+        //loop over the file and count 3 fold coincidences
+        std::map< int,std::vector<int> > puHitMap;
+        std::string line;
+        //int currentEvent = -100;
+        while( getline(in,line) ){
+            //read in all of the values, fill the puHitMap
+            std::vector<std::string> strs;
+            split(strs,line,is_any_of(" "));
+
+
+        }
+        in.close();    
+    }
+
+}
 
 // ------------ method called once each job just after ending the event loop  ------------
 void 
@@ -805,6 +836,15 @@ PLTSimHitAnalyzer::endJob()
     double entries = havgpixelhitcount->GetEntries();
     havgpixelhitcount->Scale(1./entries);
     double acceptance = (1.*eventsWithThreeFoldCoin)/(1.*eventCounter);
+
+    //count the acceptances as fn of nPU
+    if (doPileup){
+        for(puIter it = puMap.begin(); it != puMap.end(); ++it){
+            it->second->close();
+        }
+        runPileupAnalysis();
+    }
+
     if (doBeamspotStudy){
         std::cout << "************BeamSpot Study Results**********" << std::endl;
         std::cout << "Number of events with 3-fold coincidences: " << eventsWithThreeFoldCoin << std::endl;
