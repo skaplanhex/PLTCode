@@ -51,6 +51,7 @@
 #include <vector>
 #include <cstdlib>
 #include <fstream>
+//for split()
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>
 
@@ -808,6 +809,7 @@ PLTSimHitAnalyzer::beginJob()
 }
 void
 PLTSimHitAnalyzer::runPileupAnalysis(){
+    std::cout << "Starting Pileup Analysis..." << std::endl;
     using namespace boost::algorithm;
     //loop over puMap
     for(std::map<int,std::string>::const_iterator it = puFilenameMap.begin(); it != puFilenameMap.end(); ++it){
@@ -816,17 +818,31 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
         //loop over the file and count 3 fold coincidences
         std::map< int,std::vector<int> > puHitMap;
         std::string line;
-        //int currentEvent = -100;
+        int currentEvent = -100;
+        int previousEvent = -100;
+        int puEventsWithThreeFoldCoin = 0;
         while( getline(in,line) ){
             //read in all of the values, fill the puHitMap
             std::vector<std::string> strs;
-            split(strs,line,is_any_of(" "));
-
-
+            split(strs,line,is_any_of(" ")); //hopefully works like python split()
+            int channel = std::stoi( strs.at(0) );
+            int ROC = std::stoi( strs.at(1) );
+            int event = std::stoi( strs.at(5) );
+            currentEvent = event;
+            if(currentEvent > previousEvent){
+                //figure out if there was at least one 3-fold coincidence
+                bool existsThreeFoldCoin;
+                if (existsThreeFoldCoin) puEventsWithThreeFoldCoin++;
+                //after everything else...
+                previousEvent = currentEvent;
+                puHitMap.clear();
+            }
+            if( puHitMap.count(channel) == 0 ) puHitMap[channel] = std::vector<int>(1,ROC);
+            else puHitMap[channel].push_back(ROC);
         }
         in.close();    
     }
-
+    std::cout << "Finished Pileup Analysis" << std::endl;
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
