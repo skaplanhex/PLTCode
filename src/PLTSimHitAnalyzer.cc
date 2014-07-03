@@ -79,6 +79,8 @@ private:
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
     virtual int getPUEventNumber(int, int);
+    virtual bool maskROC2Pixel(int,int);
+    virtual bool maskTelescope(int);
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
@@ -173,6 +175,7 @@ private:
     bool doPileup;
     bool doBeamspotStudy;
     bool phiAtZero;
+    bool runFourTelescopes;
     int r;
     std::string digiFileName;
     int threshold;
@@ -211,6 +214,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     if (inDigiMode) threshold = iConfig.getParameter<int>("threshold");
     doBeamspotStudy = (iConfig.exists("doBeamspotStudy") ? iConfig.getParameter<bool>("doBeamspotStudy") : false);
     phiAtZero = (iConfig.exists("phiAtZero") ? iConfig.getParameter<bool>("phiAtZero") : true);
+    runFourTelescopes = (iConfig.exists("runFourTelescopes") ? iConfig.getParameter<bool>("runFourTelescopes") : false);
     r = (iConfig.exists("r") ? iConfig.getParameter<int>("r") : 0);
     if( (doBeamspotStudy) && ( !iConfig.exists("r") || !iConfig.exists("phiAtZero") )  ) //if both r and phiAtZero are not passed if doing beamspot study
         throw cms::Exception("BeamSpotIssue") << "BeamSpot mode not set up properly. Make sure BOTH phiAtZero AND r are both set!\n";
@@ -225,7 +229,17 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     if (inDigiMode) hitInfo.open(digiFileName+".txt");
     //open in append mode 
-    if (doBeamspotStudy) beamspotInfo.open("PLTBeamspotInfo.txt", ios::app);
+    if (doBeamspotStudy){
+        stringstream ss;
+        int phi = 0;
+        if (!phiAtZero) phi = 225;
+        std::string telmask="";
+        if (runFourTelescopes) telmask="TELMASK";
+        ss << "PLTBeamspotInfo_Phi" << phi << "R" << r << telmask << ".txt";
+        std::string temp = ss.str();
+        beamspotInfo.open( temp.c_str() );
+        ss.str("");
+    }
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     eventCounter = 0;
     eventsWithThreeFoldCoin = 0;
@@ -435,7 +449,23 @@ PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){
         event--;
     return event;
 }
-
+//set up to mask pixels in ROC2 to get a 6x6mm active area in the center of the sensor
+bool
+PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
+    if( ((0<=row) && (row <=9)) || ((70<=row) && (row<=79)) )
+        return true;
+    else if( ((0<=col) && (col<=6)) || ((45<=col) && (col<=51)) )
+        return true;
+    else
+        return false;
+}
+bool
+PLTSimHitAnalyzer::maskTelescope(int tel){
+    if ( (tel == 1) || (tel == 3) )
+        return true;
+    else
+        return false;
+}
 // ------------ method called for each event  ------------
 void
 PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
@@ -457,10 +487,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
     //keeps track of hit locations to easily count 3-fold coincidences
     std::map< int,std::vector<int> > hitTracker;
-    std::map< int,double > energyTracker;
-    energyTracker[0]=0.;
-    energyTracker[1]=0.;
-    energyTracker[2]=0.;
+    std::map< int,double > energyTracker; 
+    for (int i=0; i!=3; i++)
+        energyTracker[i] = 0.;
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
         hparticleeta->Fill(particleEta);
@@ -477,6 +506,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
         //analyze detid to get position of hit in the PLT
         std::vector<int> infoVector = analyzeDetId(detid);
+        if (infoVector.size() != 6) throw cms::Exception("DetID Issue") << "There's an issue with the hit detid!!\n"; 
         int pltNo = infoVector.at(0);
         int halfCarriageNo = infoVector.at(1);
         int telNo = infoVector.at(2);
@@ -484,12 +514,19 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         int rowNo = infoVector.at(4);
         int columnNo = infoVector.at(5);
 
+
         //Fill single ROC histograms
         std::stringstream ss;
         std::string ipSide;
         std::string carriageSide;
         std::string tel;
         std::string roc;
+
+        //debug string
+        std::string hitDebug;
+        ss << "pltNo="<<pltNo << " halfCarriageNo=" << halfCarriageNo << " telNo=" << telNo << "planeNo=" << planeNo << " rowNo=" << rowNo << " columnNo=" << columnNo << "\n";
+        hitDebug = ss.str();
+        ss.str("");
         
         if (pltNo == 0) {
             ipSide = "MinusZ";
@@ -514,21 +551,63 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         
         std::string histString = ipSide+"_"+carriageSide+"_"+tel+"_"+roc+"_PixelMap";
         //finally, fill the proper histogram
-        histMap[histString]->Fill(columnNo,rowNo);
-        //fill histograms for each roc
-        havgpixelhitcount->Fill(columnNo,rowNo);
-        hRocNum->Fill(planeNo);
+        if ( histMap.count(histString) == 0 ){
+            continue; //forget weird hits
+            //throw cms::Exception("PixelHistogramIssue") << hitDebug << "\n";
+        }
+        else if ( histMap.count(histString) > 0 ){
+            histMap[histString]->Fill(columnNo,rowNo);
+            //fill histograms for each roc
+            havgpixelhitcount->Fill(columnNo,rowNo);
+            hRocNum->Fill(planeNo);
+        }
         // three digit address giving side of IP, half carriage, and telescope
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
-        // if there hasn't been a hit in that telescope yet
-        if (hitTracker.count(planeLoc) == 0) {
-            hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-            //std::cout << "Telescope Added" << std::endl;
+
+        //separate conditions by beamspot study or no
+
+        //only count ROC2 hits for 3-fold coincidence if they pass the pixel mask
+        if ( doBeamspotStudy && (!runFourTelescopes) ) {
+            if (hitTracker.count(planeLoc) == 0) {
+                if (planeNo != 2)
+                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                if (planeNo != 2)
+                    hitTracker[planeLoc].push_back(planeNo);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc].push_back(planeNo);
+            }
         }
-        // if there has been a hit, add the plane number of this hit to the others
+        else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
+            if (hitTracker.count(planeLoc) == 0) {
+                if (planeNo != 2)
+                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                if (planeNo != 2)
+                    hitTracker[planeLoc].push_back(planeNo);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc].push_back(planeNo);
+            }
+        }
         else{
-            hitTracker[planeLoc].push_back(planeNo);
-            //std::cout << "Hit added to telescope" << std::endl;
+            // if there hasn't been a hit in that telescope yet
+            if (hitTracker.count(planeLoc) == 0) {
+                hitTracker[planeLoc] = std::vector<int>(1,planeNo);
+                //std::cout << "Telescope Added" << std::endl;
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                hitTracker[planeLoc].push_back(planeNo);
+                //std::cout << "Hit added to telescope" << std::endl;
+            }
         }
         hhitmomentum->Fill(mom);
         double theta = iHit->thetaAtEntry();
@@ -537,7 +616,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
         heloss->Fill(1000000*iHit->energyLoss()); //plot in keV 
-        energyTracker[planeNo] += iHit->energyLoss();
+
+        //if( planeNo < 0 || planeNo > 2 ) throw cms::Exception("PlaneNumberIssue") << "Plane number not 0,1,2. " << hitDebug; 
+        energyTracker.at(planeNo) += iHit->energyLoss();
         //        std::cout << " " << std::endl;
         //        std::cout << "PDGID: " << iHit->particleType() << std::endl;
         //        std::cout << "Energy Loss: " << iHit->energyLoss() << std::endl;
@@ -560,7 +641,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         }
     }//end loop over PLT hits
     for(int i = 0; i != 3; i++){
-        double planeEnergy = 1000000.*energyTracker[i]; //GeV -> keV
+        double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
         if (planeEnergy > 0.)
             helossPlane->Fill( planeEnergy );
     }
@@ -575,7 +656,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             bool containsOne = false;
             bool containsTwo = false;
             for (unsigned int i = 0; i < telHits.size(); i++) {
-                int pNo = telHits[i]; //plane number of hit in given telescope
+                int pNo = telHits.at(i); //plane number of hit in given telescope
                 if (pNo == 0) {
                     containsZero = true;
                 }

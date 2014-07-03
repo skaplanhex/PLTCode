@@ -5,3 +5,4 @@
 condorTEMPLATE*
 *.txt
 *__init__.py
+*DS_Store*

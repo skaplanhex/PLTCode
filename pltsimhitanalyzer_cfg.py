@@ -20,6 +20,12 @@ options.register('phiAtZero',
                  VarParsing.varType.bool,
                  "phi at zero"
 )
+options.register('runFourTelescopes',
+                 False,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.bool,
+                 "run four telescopes"
+)
 options.register('r',
                  0,
                  VarParsing.multiplicity.singleton,
@@ -54,12 +60,12 @@ process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,opti
 # 		fileNames = cms.untracked.vstring(
 # 			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
 # 			#'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_18_1_OfZ.root'
-# 			'/store/user/skaplan/MinBiasPileUpOfficial/outfile_169_1_WvX.root'
+# 			'/store/user/skaplan/noreplica/MinBiasBeamSpotPhi0R0_HISTATS/outfile14TeVSKIM_1_1_grg.root'
 # 		)
 # )
 
 process.TFileService = cms.Service("TFileService",
-fileName = cms.string(options.outfilename)
+        fileName = cms.string(options.outfilename[:-5]+"_Phi%iR%i"%(phi,options.r)+".root")
 )
 
 #file name of digi output. The file endings will be added in the analyzer (as the base name is used more than once)
@@ -72,6 +78,7 @@ process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	doBeamspotStudy = cms.bool(options.doBeamspotStudy),
 	phiAtZero = cms.bool(options.phiAtZero),
 	r = cms.int32(options.r),
+        runFourTelescopes = cms.bool(options.runFourTelescopes),
 	#digiFileName = cms.string(digifilename),
 	#doPileup = cms.bool(True),
 	#threshold = cms.int32(4000),

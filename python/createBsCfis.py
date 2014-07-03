@@ -2,14 +2,14 @@
 
 import os, sys
 
-eospath = "/eos/uscms/store/user/skaplan/"
-shortpath = "/store/user/skaplan/"
+eospath = "/eos/uscms/store/user/skaplan/noreplica/"
+shortpath = "/store/user/skaplan/noreplica/"
 
 for phi in (0,225):
 	for r in range(11):
 		if (phi == 225 and r == 0):
 			continue
-		folder="MinBiasBeamSpotPhi%iR%i/"%(phi,r)
+		folder="MinBiasBeamSpotPhi%iR%i_HISTATS/"%(phi,r)
 		fullpath = eospath+folder
 		outfiles = os.listdir(fullpath)
 		outfilesnew=[]
