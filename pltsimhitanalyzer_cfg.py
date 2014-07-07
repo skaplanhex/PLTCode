@@ -75,13 +75,13 @@ digifilename = options.outfilename[:-5]+"_digioutput"
 process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#feed this into .cc file
 	PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
-	doBeamspotStudy = cms.bool(options.doBeamspotStudy),
-	phiAtZero = cms.bool(options.phiAtZero),
-	r = cms.int32(options.r),
-        runFourTelescopes = cms.bool(options.runFourTelescopes),
-	#digiFileName = cms.string(digifilename),
-	#doPileup = cms.bool(True),
-	#threshold = cms.int32(4000),
+	#doBeamspotStudy = cms.bool(options.doBeamspotStudy),
+	#phiAtZero = cms.bool(options.phiAtZero),
+	#r = cms.int32(options.r),
+        #runFourTelescopes = cms.bool(options.runFourTelescopes),
+	digiFileName = cms.string(digifilename),
+	doPileup = cms.bool(True),
+	threshold = cms.int32(4000),
 )
 
 
