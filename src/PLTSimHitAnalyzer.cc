@@ -82,7 +82,6 @@ private:
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
     virtual int getPUEventNumber(int, int);
-    virtual bool isNewPUEvent(int,int);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual void runPileupAnalysis();
@@ -460,11 +459,6 @@ PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){
         event--;
     return event;
 }
-//is it time to switch the event?
-bool
-PLTSimHitAnalyzer::isNewPUEvent(int actualEventNum, int numPileupEvents){
-
-}
 //set up to mask pixels in ROC2 to get a 6x6mm active area in the center of the sensor
 bool
 PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
@@ -836,7 +830,7 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
             int channel = std::stoi( strs.at(0) );
             int ROC = std::stoi( strs.at(1) );
             int event = std::stoi( strs.at(5) );
-            currentEvent = getPUEventNumber(event,numPU);
+            currentEvent = event;
             if(currentEvent > previousEvent){
                 //loop over hitmap to see if there is a threefold coincidence
                 for (std::map< int , std::vector<int> >::const_iterator iTel = puHitMap.begin(); iTel != puHitMap.end(); ++iTel) {
@@ -866,7 +860,7 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
                 }//end loop over telescopes
                 puNumTotalEvents++;
                 //forget now about last event, go to current event
-                previousEvent = getPUEventNumber(currentEvent,numPU);
+                previousEvent = currentEvent;
                 puHitMap.clear(); //clear hit map to only have it reflect this event
             } //end if statement on new event
             if( puHitMap.count(channel) == 0 ) puHitMap[channel] = std::vector<int>(1,ROC);
