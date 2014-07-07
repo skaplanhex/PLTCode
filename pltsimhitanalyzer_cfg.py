@@ -49,12 +49,12 @@ process.MessageLogger.cerr.FwkReport.reportEvery = 1
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxEvents) )
 
 #source files
-# process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
+process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
 # process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
 phi = 0
 if not options.phiAtZero:
 	phi = 225
-process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
+# process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
 
 # process.source = cms.Source("PoolSource",
 # 		fileNames = cms.untracked.vstring(

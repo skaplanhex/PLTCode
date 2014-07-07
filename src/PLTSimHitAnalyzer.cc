@@ -253,14 +253,14 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //pileup stuff
     if (doPileup){
 
-        puFilenameMap[5] = digiFileName+"_PU5.txt";
-        puFilenameMap[10] = digiFileName+"_PU10.txt";
-        puFilenameMap[15] = digiFileName+"_PU15.txt";
-        puFilenameMap[20] = digiFileName+"_PU20.txt";
-        puFilenameMap[25] = digiFileName+"_PU25.txt";
-        puFilenameMap[30] = digiFileName+"_PU30.txt";
-        puFilenameMap[35] = digiFileName+"_PU35.txt";
-        puFilenameMap[40] = digiFileName+"_PU40.txt";
+        puFilenameMap[5] = "puTextFiles/"+digiFileName+"_PU5.txt";
+        puFilenameMap[10] = "puTextFiles/"+digiFileName+"_PU10.txt";
+        puFilenameMap[15] = "puTextFiles/"+digiFileName+"_PU15.txt";
+        puFilenameMap[20] = "puTextFiles/"+digiFileName+"_PU20.txt";
+        puFilenameMap[25] = "puTextFiles/"+digiFileName+"_PU25.txt";
+        puFilenameMap[30] = "puTextFiles/"+digiFileName+"_PU30.txt";
+        puFilenameMap[35] = "puTextFiles/"+digiFileName+"_PU35.txt";
+        puFilenameMap[40] = "puTextFiles/"+digiFileName+"_PU40.txt";
         
         puMap[5] = new std::ofstream(puFilenameMap[5]);
         puMap[10] = new std::ofstream(puFilenameMap[10]);
@@ -809,11 +809,12 @@ PLTSimHitAnalyzer::beginJob()
 }
 void
 PLTSimHitAnalyzer::runPileupAnalysis(){
+    std::ofstream puOut("puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
     std::cout << "Starting Pileup Analysis..." << std::endl;
     using namespace boost::algorithm;
     //loop over puMap
     for(std::map<int,std::string>::const_iterator it = puFilenameMap.begin(); it != puFilenameMap.end(); ++it){
-        //int numPu = it->first;
+        int numPU = it->first;
         std::ifstream in(it->second);
         //loop over the file and count 3 fold coincidences
         std::map< int,std::vector<int> > puHitMap;
@@ -821,6 +822,7 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
         int currentEvent = -100;
         int previousEvent = -100;
         int puEventsWithThreeFoldCoin = 0;
+        int puNumTotalEvents = -1; // at the first line, the currentEvent > previousEvent if statement will be executed to make this 0.  At the end of the first event, this will be 1 as expected
         while( getline(in,line) ){
             //read in all of the values, fill the puHitMap
             std::vector<std::string> strs;
@@ -828,20 +830,47 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
             int channel = std::stoi( strs.at(0) );
             int ROC = std::stoi( strs.at(1) );
             int event = std::stoi( strs.at(5) );
-            currentEvent = event;
+            currentEvent = getPUEventNumber(event,numPU);
             if(currentEvent > previousEvent){
-                //figure out if there was at least one 3-fold coincidence
-                bool existsThreeFoldCoin;
-                if (existsThreeFoldCoin) puEventsWithThreeFoldCoin++;
-                //after everything else...
-                previousEvent = currentEvent;
-                puHitMap.clear();
-            }
+                //loop over hitmap to see if there is a threefold coincidence
+                for (std::map< int , std::vector<int> >::const_iterator iTel = puHitMap.begin(); iTel != puHitMap.end(); ++iTel) {
+                    std::vector<int> telHits = iTel->second;
+                    if (telHits.size()<3) {
+                        continue;
+                    }
+                    else{
+                        bool containsZero = false;
+                        bool containsOne = false;
+                        bool containsTwo = false;
+                        for (unsigned int i = 0; i < telHits.size(); i++) {
+                            int pNo = telHits.at(i); //plane number of hit in given telescope
+                            if (pNo == 0) {
+                                containsZero = true;
+                            }
+                            else if (pNo == 1){
+                                containsOne = true;
+                            }
+                            else if (pNo == 2){
+                                containsTwo = true;
+                            }
+                        }
+                        bool existsThreeFoldCoin = containsZero && containsOne && containsTwo; //if >=3 hits distributed among all three planes
+                        if (existsThreeFoldCoin) puEventsWithThreeFoldCoin++;
+                    } //end else statement (telescopes with at least three hits)
+                }//end loop over telescopes
+                puNumTotalEvents++;
+                //forget now about last event, go to current event
+                previousEvent = getPUEventNumber(currentEvent,numPU);
+                puHitMap.clear(); //clear hit map to only have it reflect this event
+            } //end if statement on new event
             if( puHitMap.count(channel) == 0 ) puHitMap[channel] = std::vector<int>(1,ROC);
             else puHitMap[channel].push_back(ROC);
-        }
-        in.close();    
-    }
+        } //end loop over each pileup scenario
+        in.close();
+        double accep = (1.0*puEventsWithThreeFoldCoin)/(1.0*puNumTotalEvents);
+        puOut << numPU << " " <<  puEventsWithThreeFoldCoin <<  " " << puNumTotalEvents <<  " " << accep << "\n";
+    } //end loop over pileup scenarios
+    puOut.close();
     std::cout << "Finished Pileup Analysis" << std::endl;
 }
 
