@@ -82,6 +82,7 @@ private:
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
     virtual int getPUEventNumber(int, int);
+    virtual bool isNewPUEvent(int,int);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual void runPileupAnalysis();
@@ -458,6 +459,11 @@ PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){
     if ( ratio == 1.0*(event-1.) )
         event--;
     return event;
+}
+//is it time to switch the event?
+bool
+PLTSimHitAnalyzer::isNewPUEvent(int actualEventNum, int numPileupEvents){
+
 }
 //set up to mask pixels in ROC2 to get a 6x6mm active area in the center of the sensor
 bool
