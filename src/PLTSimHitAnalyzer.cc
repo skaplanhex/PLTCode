@@ -820,7 +820,7 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
         std::map< int,std::vector<int> > puHitMap;
         std::string line;
         int currentEvent = -100;
-        int previousEvent = -100;
+        int previousEvent = -1000;
         int puEventsWithThreeFoldCoin = 0;
         int puNumTotalEvents = -1; // at the first line, the currentEvent > previousEvent if statement will be executed to make this 0.  At the end of the first event, this will be 1 as expected
         while( getline(in,line) ){
