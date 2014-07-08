@@ -185,6 +185,8 @@ private:
     int threshold;
     long eventCounter;
     int eventsWithThreeFoldCoin;
+    std::map< int,int > nPUEventCounterMap; //key = #PU events we are looking at, value = #pileup events currently counted for that scenario
+    std::map< int,int > puEventNumberMap; //key = #PU events, value = current "event number" that will be incremented when the nPUEventCounterMap count = its key + 1
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
     std::map< int,std::string > puFilenameMap;
     std::map< int,double > puAccepMap;
@@ -253,23 +255,26 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //pileup stuff
     if (doPileup){
 
-        puFilenameMap[5] = "puTextFiles/"+digiFileName+"_PU5.txt";
-        puFilenameMap[10] = "puTextFiles/"+digiFileName+"_PU10.txt";
-        puFilenameMap[15] = "puTextFiles/"+digiFileName+"_PU15.txt";
-        puFilenameMap[20] = "puTextFiles/"+digiFileName+"_PU20.txt";
-        puFilenameMap[25] = "puTextFiles/"+digiFileName+"_PU25.txt";
-        puFilenameMap[30] = "puTextFiles/"+digiFileName+"_PU30.txt";
-        puFilenameMap[35] = "puTextFiles/"+digiFileName+"_PU35.txt";
-        puFilenameMap[40] = "puTextFiles/"+digiFileName+"_PU40.txt";
-        
-        puMap[5] = new std::ofstream(puFilenameMap[5]);
-        puMap[10] = new std::ofstream(puFilenameMap[10]);
-        puMap[15] = new std::ofstream(puFilenameMap[15]);
-        puMap[20] = new std::ofstream(puFilenameMap[20]);
-        puMap[25] = new std::ofstream(puFilenameMap[25]);
-        puMap[30] = new std::ofstream(puFilenameMap[30]);
-        puMap[35] = new std::ofstream(puFilenameMap[35]);
-        puMap[40] = new std::ofstream(puFilenameMap[40]);
+        //just in this one place, define all the pileup scenarios under study
+        std::vector<int> puScenarios;
+        puScenarios.push_back(5);
+        puScenarios.push_back(10);
+        puScenarios.push_back(15);
+        puScenarios.push_back(20);
+        puScenarios.push_back(25);
+        puScenarios.push_back(30);
+        puScenarios.push_back(35);
+        puScenarios.push_back(40);
+
+        for(unsigned int i=0; i<puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            stringstream ss;
+            ss << "puTextFiles/"+digiFileName+"_PU" << nPU << ".txt";
+            puFilenameMap[nPU] = ss.str();
+            puMap[nPU] = new std::ofstream(puFilenameMap[nPU]);
+            nPUEventCounterMap[nPU] = 1; //initialize all these to one to let the first event be the first counted (duh)
+            puEventNumberMap[nPU] = 1; //start at eventNum = 1
+        }
 
     }
     
@@ -482,6 +487,19 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 {
 
     eventCounter++;
+    //look to see where the nPU counter is for each scenario. If the scenario is for example nPU=5, then after the 6th event (i.e. at the beginning of the 7th), I should start a new event.
+    if (doPileup){
+        for(std::map<int,int>::iterator it = puEventNumberMap.begin(); it != puEventNumberMap.end(); ++it){
+            int numPU = it->first;
+            if( nPUEventCounterMap[numPU] == (numPU+2) ){
+                puEventNumberMap[numPU]++;
+                nPUEventCounterMap[numPU] = 1; // =1 because as the analyze() method continues, this will be the first event contribution to the new PU event
+            }
+            else
+                nPUEventCounterMap[numPU]++;
+        }
+    }
+
     
     edm::Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
@@ -645,7 +663,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
                 //for each pileup scenario
                 for(puIter it = puMap.begin(); it != puMap.end(); ++it){
                     int numPU = it->first;
-                    ( *(it->second) ) << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << getPUEventNumber(eventCounter,numPU) << "\n";
+                    ( *(it->second) ) << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << puEventNumberMap[numPU] << "\n";
                 }
             }
         }
@@ -884,6 +902,7 @@ PLTSimHitAnalyzer::endJob()
 
     //count the acceptances as fn of nPU
     if (doPileup){
+        //close the pileup file ofstreams
         for(puIter it = puMap.begin(); it != puMap.end(); ++it){
             it->second->close();
         }
