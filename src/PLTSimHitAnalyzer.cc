@@ -174,6 +174,7 @@ private:
     std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
     std::ofstream hitInfo;
+    std::ofstream genParticleInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
     //std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
@@ -236,7 +237,10 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     std::cout << "doBeamspotStudy = " << doBeamspotStudy << std::endl;
 
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
-    if (inDigiMode) hitInfo.open(digiFileName+".txt");
+    if (inDigiMode){
+        hitInfo.open(digiFileName+".txt");
+        genParticleInfo.open(digiFileName+"_genParticleInfo.txt");
+    }
     //open in append mode 
     if (doBeamspotStudy){
         stringstream ss;
@@ -287,7 +291,10 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
-    if (inDigiMode) hitInfo.close();
+    if (inDigiMode){
+        hitInfo.close();
+        genParticleInfo.close();
+    }
     if (doBeamspotStudy) beamspotInfo.close();
     
 }
@@ -516,14 +523,19 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
     //keeps track of hit locations to easily count 3-fold coincidences
     std::map< int,std::vector<int> > hitTracker;
+    
+    //keeps track of eloss in each ROC
     std::map< int,double > energyTracker; 
     for (int i=0; i!=3; i++)
         energyTracker[i] = 0.;
+
+    //loop over
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
         double particleTheta = iParticle->theta();
         hparticleeta->Fill(particleEta);
         hGenTheta->Fill(particleTheta);
+        genParticleInfo << iParticle->pdgId() << " " << iParticle->pt() << " " << iParticle->eta() << " " << iParticle->phi() << " " << iParticle->energy() << " " << iParticle->theta() << " " << eventCounter << "\n";
         if ( 4.1<fabs(particleEta) && fabs(particleEta) < 4.4 ) {
             hparticlephi->Fill( iParticle->phi() );
         }

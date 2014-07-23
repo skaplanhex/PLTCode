@@ -32,6 +32,11 @@ options.register('r',
                  VarParsing.varType.int,
                  "value of r_beamspot"
 )
+options.register('reportEvery', 10,
+    VarParsing.multiplicity.singleton,
+    VarParsing.varType.int,
+    "Report every N events (default is N=10)"
+)
 ## 'maxEvents' and 'outputFile' are already registered by the Framework, changing default value
 options.setDefault('maxEvents', -1)
 options.parseArguments()
@@ -44,16 +49,16 @@ process = cms.Process("Demo")
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 
-process.MessageLogger.cerr.FwkReport.reportEvery = 1
+process.MessageLogger.cerr.FwkReport.reportEvery = options.reportEvery
 
 process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxEvents) )
 
 #source files
-process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
-# process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
-phi = 0
-if not options.phiAtZero:
-	phi = 225
+# process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
+process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
+# phi = 0
+# if not options.phiAtZero:
+# 	phi = 225
 # process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
 
 # process.source = cms.Source("PoolSource",
@@ -65,7 +70,7 @@ if not options.phiAtZero:
 # )
 
 process.TFileService = cms.Service("TFileService",
-        fileName = cms.string(options.outfilename[:-5]+"_Phi%iR%i"%(phi,options.r)+".root")
+        fileName = cms.string(options.outfilename)
 )
 
 #file name of digi output. The file endings will be added in the analyzer (as the base name is used more than once)
@@ -80,7 +85,7 @@ process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
 	digiFileName = cms.string(digifilename),
-	doPileup = cms.bool(True),
+	doPileup = cms.bool(False),
 	threshold = cms.int32(4000),
 )
 

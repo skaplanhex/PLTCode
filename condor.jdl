@@ -2,7 +2,8 @@ universe = vanilla
 Requirements = Memory >= 199 && OpSys == "LINUX" && (Arch != "DUMMY" )
 Should_Transfer_Files = YES
 WhenToTransferOutput = ON_EXIT
-Notification = never
+Notification = Complete
+notify_user = skaplan@physics.rutgers.edu
 x509userproxy = $ENV(X509_USER_PROXY)
 Executable = runPLTSHA.sh
 should_transfer_files = YES
@@ -11,4 +12,4 @@ Output = /uscms/home/skaplan/condor/run_$(Process).stdout
 Error = /uscms/home/skaplan/condor/run_$(Process).stderr
 Log = /uscms/home/skaplan/condor/run_$(Process).condor
 Arguments = $(Process)
-Queue 32
+Queue 1
