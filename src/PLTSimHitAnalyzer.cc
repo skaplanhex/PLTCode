@@ -89,7 +89,8 @@ private:
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
     edm::Service<TFileService> fs;
-    TH1D* htheta;
+    TH1D* hSimHitTheta;
+    TH1D* hGenTheta;
     TH1D* heta;
     TH1D* htof;
     TH1D* heloss;
@@ -520,7 +521,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         energyTracker[i] = 0.;
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
+        double particleTheta = iParticle->theta();
         hparticleeta->Fill(particleEta);
+        hGenTheta->Fill(particleTheta);
         if ( 4.1<fabs(particleEta) && fabs(particleEta) < 4.4 ) {
             hparticlephi->Fill( iParticle->phi() );
         }
@@ -640,7 +643,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         hhitmomentum->Fill(mom);
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
-        htheta->Fill(theta);
+        hSimHitTheta->Fill(theta);
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
         heloss->Fill(1000000*iHit->energyLoss()); //plot in keV 
@@ -710,7 +713,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 void 
 PLTSimHitAnalyzer::beginJob()
 {
-    htheta = fs->make<TH1D>("htheta","Particle Theta", 300,0,3.1416);
+    hSimHitTheta = fs->make<TH1D>("hSimHitTheta","SimHit Theta", 300,0,3.1416);
+    hGenTheta = fs->make<TH1D>("hGenTheta","GenParticle Theta", 300,0,3.1416);
     heta = fs->make<TH1D>("heta","Particle Eta",1000,-5,5);
     htof = fs->make<TH1D>("htof","Time of Flight from IP (ns)",100,0,25);
     heloss = fs->make<TH1D>("heloss","Energy Loss",500,0,500);
