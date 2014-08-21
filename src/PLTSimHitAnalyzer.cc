@@ -49,6 +49,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <tuple>
 #include <cstdlib>
 #include <fstream>
 //for split()
@@ -57,6 +58,30 @@
 
 using namespace edm;
 using namespace std;
+
+
+//declare PLTHit class to make integrating the binary conversion code easier
+//maybe use this for the main analyzer section as well?
+class PLTHit {
+public:
+    PLTHit(int channel, int roc, int column, int row, int adc, int event)
+        :channel(channel),roc(roc),column(column),row(row),adc(adc),event(event){};
+    ~PLTHit(){};
+    int Channel(){ return channel; }
+    int ROC(){ return roc; }
+    int Column(){ return column; }
+    int Row(){ return row; }
+    int ADC(){ return adc; }
+    int Event(){ return event; }
+private:
+    int channel;
+    int roc;
+    int column;
+    int row;
+    int adc;
+    int event;
+
+};
 
 //
 // class declaration
@@ -85,6 +110,7 @@ private:
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual void runPileupAnalysis();
+    virtual void makeBinary();
     
     // ----------member data ---------------------------
     edm::InputTag simHitLabel;
@@ -184,6 +210,7 @@ private:
     bool doBeamspotStudy;
     bool phiAtZero;
     bool runFourTelescopes;
+    bool wantBinaryOutput;
     int r;
     std::string digiFileName;
     int threshold;
@@ -196,6 +223,7 @@ private:
     std::map< int,double > puAccepMap;
     std::map< int,int > threeFoldMap; //for 3-fold coincidences in different pileup scenarios
     typedef std::map<int,std::ofstream*>::iterator puIter;
+    // typedef std::tuple<int,int,int,int,int,int> PLTHit;
     
 };
 
@@ -222,8 +250,11 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     if ( doPileup && (!inDigiMode) ){ //for the case that neither digiFileName nor threshold are set, but doPileup is set to true
         throw cms::Exception("PileupIssue") << "Digi mode not set up properly. Make sure BOTH digiFileName AND threshold are both set!\n";
     }
-    if (inDigiMode) digiFileName = iConfig.getParameter<std::string>("digiFileName");
-    if (inDigiMode) threshold = iConfig.getParameter<int>("threshold");
+    if (inDigiMode){
+        digiFileName = iConfig.getParameter<std::string>("digiFileName");
+        threshold = iConfig.getParameter<int>("threshold");
+        wantBinaryOutput = (iConfig.exists("wantBinaryOutput") ? iConfig.getParameter<bool>("wantBinaryOutput") : false);
+    }
     doBeamspotStudy = (iConfig.exists("doBeamspotStudy") ? iConfig.getParameter<bool>("doBeamspotStudy") : false);
     phiAtZero = (iConfig.exists("phiAtZero") ? iConfig.getParameter<bool>("phiAtZero") : true);
     runFourTelescopes = (iConfig.exists("runFourTelescopes") ? iConfig.getParameter<bool>("runFourTelescopes") : false);
@@ -294,7 +325,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode){
-        hitInfo.close();
+        if (!wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
         genParticleInfo.close();
     }
     if (doBeamspotStudy) beamspotInfo.close();
@@ -928,6 +959,175 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
     std::cout << "Finished Pileup Analysis" << std::endl;
 }
 
+//The vast majority of the translation to binary code was written by Dean Hidas
+void
+PLTSimHitAnalyzer::makeBinary()
+{
+    std::cout << "" << std::endl;
+    std::cout << "*****************************************************" << std::endl;
+    std::cout << "*                                                   *" << std::endl;
+    std::cout << "*   Now producing a binary of the hit information   *" << std::endl;
+    std::cout << "*            This should be fairly quick            *" << std::endl;
+    std::cout << "*                                                   *" << std::endl;
+    std::cout << "*****************************************************" << std::endl;
+    hitInfo.close();
+
+    std::string InFileName = digiFileName+".txt";
+    std::ifstream InFile(InFileName.c_str());
+    if (!InFile.is_open()) {
+        std::cerr << "ERROR: cannot open input file: " << InFileName << std::endl;
+        throw;
+    }
+
+    std::string OutFileName = digiFileName+"_BINARY.dat";
+    std::ofstream fout(OutFileName.c_str(), std::ios::binary);
+    if (!fout.is_open()) {
+        std::cerr << "ERROR: cannot open output file" << std::endl;
+        throw;
+    }
+
+    uint32_t n, n2;
+
+    int Channel, ROC, Column, Row, ADC, EventNumber;
+    int LastEventNumber = -1;
+    bool IsFirstEvent = true;
+    std::vector<PLTHit> Hits;
+
+    for ( ; InFile >> Channel >> ROC >> Column >> Row >> ADC >> EventNumber; ) {
+        if (IsFirstEvent) {
+            LastEventNumber = EventNumber;
+            IsFirstEvent = false;
+        }
+        if (EventNumber != LastEventNumber) {
+
+            // Delete all hits and clear vector
+            n2 = (5 << 8);
+            n =  0x50000000;
+            n |= LastEventNumber;
+            fout.write( (char*) &n2, sizeof(uint32_t) );
+            fout.write( (char*) &n, sizeof(uint32_t) );
+
+
+            for (size_t ihit = 0; ihit != Hits.size(); ++ihit) {
+                n = 0x00000000;
+                PLTHit* Hit = &Hits[ihit];
+                //printf("Channel ROC Row Col ADC: %2i %1i %2i %2i %4i %12i\n", Hit->Channel(), Hit->ROC(), Hit->Row(), Hit->Column(), Hit->ADC(), ievent);
+                //fprintf(ff, "%2i %1i %2i %2i %4i %i\n", Hit->Channel(), Hit->ROC(), Hit->Column(), Hit->Row(), Hit->ADC(), EventNumber);
+                // printf("%2i %1i %2i %2i %4i %i\n", Hit->Channel(), Hit->ROC(), Hit->Column(), Hit->Row(), Hit->ADC(), EventNumber);
+
+                n |= (Hit->Channel() << 26);
+                n |= ( (Hit->ROC() + 1) << 21);
+
+                if (Hit->Column() % 2 == 0) {
+                  n |= ( ((80 - Hit->Row()) * 2) << 8 );
+                } else {
+                  // checked, correct
+                  n |= ( ((80 - Hit->Row()) * 2 + 1) << 8 );
+                }
+
+                if (Hit->Column() % 2 == 0) {
+                  n |= ( ((Hit->Column()) / 2) << 16  );
+                } else {
+                  n |= (( (Hit->Column() - 1) / 2) << 16  );
+                }
+                n |= Hit->ADC();
+
+
+                //if (Hit->ROC() == 2) {
+                //  printf("WORD: %X\n", (n &  0x3e00000));
+                //}
+
+                fout.write( (char*) &n, sizeof(uint32_t) );
+            }
+
+            if (Hits.size() % 2 == 0) {
+                // even number of hits.. need to fill out the word.. just print the number over two as 2x32  words
+                n  = 0xa0000000;
+                n2 = 0x00000000;
+                n  |= (Hits.size() / 2 + 2);
+                fout.write( (char*) &n2, sizeof(uint32_t) );
+                fout.write( (char*) &n, sizeof(uint32_t) );
+            } else {
+                // Print number of hits in 1x32 bit
+                n  = 0x00000000;
+                fout.write( (char*) &n, sizeof(uint32_t) );
+                fout.write( (char*) &n, sizeof(uint32_t) );
+                n  = 0xa0000000;
+                n  |= (Hits.size() / 2 + 1);
+                fout.write( (char*) &n, sizeof(uint32_t) );
+            }
+
+            LastEventNumber = EventNumber;
+            Hits.clear();
+        }
+
+        Hits.push_back( PLTHit(Channel, ROC, Column, Row, ADC, EventNumber) );
+
+    }
+
+
+
+    // Delete all hits and clear vector
+    n2 = (5 << 8);
+    n =  0x50000000;
+    n |= LastEventNumber;
+    fout.write( (char*) &n2, sizeof(uint32_t) );
+    fout.write( (char*) &n, sizeof(uint32_t) );
+
+
+      for (size_t ihit = 0; ihit != Hits.size(); ++ihit) {
+        n = 0x00000000;
+        PLTHit* Hit = &Hits[ihit];
+        //printf("Channel ROC Row Col ADC: %2i %1i %2i %2i %4i %12i\n", Hit->Channel(), Hit->ROC(), Hit->Row(), Hit->Column(), Hit->ADC(), ievent);
+        //fprintf(ff, "%2i %1i %2i %2i %4i %i\n", Hit->Channel(), Hit->ROC(), Hit->Column(), Hit->Row(), Hit->ADC(), EventNumber);
+        // printf("%2i %1i %2i %2i %4i %i\n", Hit->Channel(), Hit->ROC(), Hit->Column(), Hit->Row(), Hit->ADC(), EventNumber);
+
+        n |= (Hit->Channel() << 26);
+        n |= ( (Hit->ROC() + 1) << 21);
+
+        if (Hit->Column() % 2 == 0) {
+          n |= ( ((80 - Hit->Row()) * 2) << 8 );
+        } else {
+          // checked, correct
+          n |= ( ((80 - Hit->Row()) * 2 + 1) << 8 );
+        }
+
+        if (Hit->Column() % 2 == 0) {
+          n |= ( ((Hit->Column()) / 2) << 16  );
+        } else {
+          n |= (( (Hit->Column() - 1) / 2) << 16  );
+        }
+        n |= Hit->ADC();
+
+
+        //if (Hit->ROC() == 2) {
+        //  printf("WORD: %X\n", (n &  0x3e00000));
+        //}
+
+        fout.write( (char*) &n, sizeof(uint32_t) );
+      }
+
+      if (Hits.size() % 2 == 0) {
+        // even number of hits.. need to fill out the word.. just print the number over two as 2x32  words
+        n  = 0xa0000000;
+        n2 = 0x00000000;
+        n  |= (Hits.size() / 2 + 2);
+        fout.write( (char*) &n2, sizeof(uint32_t) );
+        fout.write( (char*) &n, sizeof(uint32_t) );
+      } else {
+        // Print number of hits in 1x32 bit
+        n  = 0x00000000;
+        fout.write( (char*) &n, sizeof(uint32_t) );
+        fout.write( (char*) &n, sizeof(uint32_t) );
+        n  = 0xa0000000;
+        n  |= (Hits.size() / 2 + 1);
+        fout.write( (char*) &n, sizeof(uint32_t) );
+      }
+
+    fout.close();
+
+}
+
 // ------------ method called once each job just after ending the event loop  ------------
 void 
 PLTSimHitAnalyzer::endJob() 
@@ -953,6 +1153,7 @@ PLTSimHitAnalyzer::endJob()
         std::cout << "This information is now being recorded in the text file." << std::endl;
         beamspotInfo << phiAtZero << " " << r << " " <<  eventsWithThreeFoldCoin << " " <<  eventCounter << " " << acceptance <<  "\n";
     }
+    if (wantBinaryOutput) makeBinary();
     //std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
 }
 

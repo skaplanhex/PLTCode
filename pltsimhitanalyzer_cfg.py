@@ -14,6 +14,12 @@ options.register('doBeamspotStudy',
                  VarParsing.varType.bool,
                  "whether or not to do beamspot study"
 )
+options.register('wantBinaryOutput',
+                 False,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.bool,
+                 "whether or not to produce binary output"
+)
 options.register('phiAtZero',
                  True,
                  VarParsing.multiplicity.singleton,
@@ -55,19 +61,19 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxE
 
 #source files
 # process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
-process.load("Analyzers.PLTSimHitAnalyzer.muongun_largerange_cfi")
+# process.load("Analyzers.PLTSimHitAnalyzer.muongun_largerange_cfi")
 # phi = 0
 # if not options.phiAtZero:
 # 	phi = 225
 # process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
 
-# process.source = cms.Source("PoolSource",
-# 		fileNames = cms.untracked.vstring(
-# 			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
-# 			#'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_18_1_OfZ.root'
-# 			'/store/user/skaplan/noreplica/MinBiasBeamSpotPhi0R0_HISTATS/outfile14TeVSKIM_1_1_grg.root'
-# 		)
-# )
+process.source = cms.Source("PoolSource",
+		fileNames = cms.untracked.vstring(
+			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
+			#'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_18_1_OfZ.root'
+			'/store/user/skaplan/noreplica/MinBias14TeV/outfile14TeVSKIM_313_1_qk7.root'
+		)
+)
 
 process.TFileService = cms.Service("TFileService",
         fileName = cms.string(options.outfilename)
@@ -77,7 +83,7 @@ process.TFileService = cms.Service("TFileService",
 digifilename = options.outfilename[:-5]+"_digioutput"
 
 #maybe have these paramateters as ones that can be passed in via VarParsing?
-process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
+process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#feed this into .cc file
 	PLTHits = cms.InputTag("g4SimHits","PLTHits","SIM"),
 	#doBeamspotStudy = cms.bool(options.doBeamspotStudy),
@@ -87,7 +93,8 @@ process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	digiFileName = cms.string(digifilename),
 	# doPileup = cms.bool(False),
 	threshold = cms.int32(4000),
+    wantBinaryOutput = cms.bool(options.wantBinaryOutput) #flag to create additional binary output as well as the text
 )
 
 
-process.p = cms.Path(process.demo)
+process.p = cms.Path(process.simhitplots)
