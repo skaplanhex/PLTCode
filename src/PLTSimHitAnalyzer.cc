@@ -103,6 +103,8 @@ private:
     TH2D* havgpixelhitcount;
     TH1D* hRocNum;
     TH1D* simVertexMult;
+    TH1D* hPhiHits;
+    TH1D* hEtaHits;
     
     //pixel maps
     TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
@@ -529,17 +531,23 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     for (int i=0; i!=3; i++)
         energyTracker[i] = 0.;
 
-    //loop over
+    //loop over genParticles
+
+    double muonPhi = 0.;
+    double muonEta = 0.;
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
         double particleTheta = iParticle->theta();
         hparticleeta->Fill(particleEta);
         hGenTheta->Fill(particleTheta);
+        muonPhi = iParticle->phi();
+        muonEta = particleEta;
         genParticleInfo << iParticle->pdgId() << " " << iParticle->pt() << " " << iParticle->eta() << " " << iParticle->phi() << " " << iParticle->energy() << " " << iParticle->theta() << " " << eventCounter << "\n";
         if ( 4.1<fabs(particleEta) && fabs(particleEta) < 4.4 ) {
             hparticlephi->Fill( iParticle->phi() );
         }
     }
+    bool roc0Hit = false;
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
         //std::cout << "HIT!!!" << std::endl;
         double mom = iHit->pabs();
@@ -658,7 +666,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         hSimHitTheta->Fill(theta);
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
-        heloss->Fill(1000000*iHit->energyLoss()); //plot in keV 
+        if(planeNo == 0) roc0Hit = true;
+        heloss->Fill(1000000*iHit->energyLoss()); //plot in keV
 
         //if( planeNo < 0 || planeNo > 2 ) throw cms::Exception("PlaneNumberIssue") << "Plane number not 0,1,2. " << hitDebug; 
         energyTracker.at(planeNo) += iHit->energyLoss();
@@ -683,6 +692,10 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             }
         }
     }//end loop over PLT hits
+    if(roc0Hit){
+        hPhiHits->Fill( muonPhi );
+        hEtaHits->Fill( muonEta );
+    }
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
         if (planeEnergy > 0.)
@@ -739,6 +752,8 @@ PLTSimHitAnalyzer::beginJob()
     havgpixelhitcount = fs->make<TH2D>("havgpixelhitcount","Normalized Pixel Hit Count For All ROCs",52,-0.5,51.5,80,-0.5,79.5);
     hRocNum = fs->make<TH1D>("hRocNum","ROC Number Of PSimHit",3,-0.5,2.5);
     simVertexMult = fs->make<TH1D>("simVertexMult","SimVertex Multiplicity",101,-0.5,100.5);
+    hPhiHits = fs->make<TH1D>("hPhiHits","Events with At Least One Hit vs. Phi",1000,1.8,2.1);
+    hEtaHits = fs->make<TH1D>("hEtaHits","Events with At Least One Hit vs. Eta",1000,3.9,4.6);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);

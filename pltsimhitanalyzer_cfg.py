@@ -55,7 +55,7 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxE
 
 #source files
 # process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
-process.load("Analyzers.PLTSimHitAnalyzer.muongun_cfi")
+process.load("Analyzers.PLTSimHitAnalyzer.muongun_largerange_cfi")
 # phi = 0
 # if not options.phiAtZero:
 # 	phi = 225
@@ -85,7 +85,7 @@ process.demo = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
 	digiFileName = cms.string(digifilename),
-	doPileup = cms.bool(False),
+	# doPileup = cms.bool(False),
 	threshold = cms.int32(4000),
 )
 
