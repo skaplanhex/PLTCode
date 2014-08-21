@@ -677,8 +677,13 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         //        std::cout << "DetID: " << iHit->detUnitId() << std::endl;
         //        std::cout << " " << std::endl;
         int channelNum = getChannel(pltNo,halfCarriageNo,telNo);
-        double adc = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
-        if ( (adc > threshold) && inDigiMode ){
+        double numberOfElectrons = ( (iHit->energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
+
+        //to get adc, use GainCal coefficient of 1.538462e-2 and round to nearest int
+        const double GAINCAL = 1.538462e-2;
+        int adc = round( numberOfElectrons*GAINCAL );
+
+        if ( (numberOfElectrons > threshold) && inDigiMode ){
             //fill the normal digi output
             hitInfo << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << eventCounter << "\n";
 
