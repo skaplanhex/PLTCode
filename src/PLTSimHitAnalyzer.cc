@@ -202,7 +202,6 @@ private:
     std::map< std::string,TH2D* > histMap;
     int threeFoldCount;
     std::ofstream hitInfo;
-    std::ofstream genParticleInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
     //std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
@@ -272,7 +271,6 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //digiFileName is a base string for naming of the output files.  Amend it for the various files needed.
     if (inDigiMode){
         hitInfo.open(digiFileName+".txt");
-        genParticleInfo.open(digiFileName+"_genParticleInfo.txt");
     }
     //open in append mode 
     if (doBeamspotStudy){
@@ -292,7 +290,6 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 
     //pileup stuff
     if (doPileup){
-
         //just in this one place, define all the pileup scenarios under study
         std::vector<int> puScenarios;
         puScenarios.push_back(5);
@@ -324,10 +321,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     
     // do anything here that needs to be done at desctruction time
     // (e.g. close files, deallocate resources etc.)
-    if (inDigiMode){
-        if (!wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
-        genParticleInfo.close();
-    }
+    if (inDigiMode && !wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
     if (doBeamspotStudy) beamspotInfo.close();
     
 }
@@ -564,21 +558,15 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
     //loop over genParticles
 
-    double muonPhi = 0.;
-    double muonEta = 0.;
     for (std::vector<reco::GenParticle>::const_iterator iParticle = particleHandle->begin(); iParticle != particleHandle->end(); ++iParticle) {
         double particleEta = iParticle->eta();
         double particleTheta = iParticle->theta();
         hparticleeta->Fill(particleEta);
         hGenTheta->Fill(particleTheta);
-        muonPhi = iParticle->phi();
-        muonEta = particleEta;
-        genParticleInfo << iParticle->pdgId() << " " << iParticle->pt() << " " << iParticle->eta() << " " << iParticle->phi() << " " << iParticle->energy() << " " << iParticle->theta() << " " << eventCounter << "\n";
         if ( 4.1<fabs(particleEta) && fabs(particleEta) < 4.4 ) {
             hparticlephi->Fill( iParticle->phi() );
         }
     }
-    bool roc0Hit = false;
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
         //std::cout << "HIT!!!" << std::endl;
         double mom = iHit->pabs();
@@ -697,7 +685,6 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         hSimHitTheta->Fill(theta);
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
-        if(planeNo == 0) roc0Hit = true;
         heloss->Fill(1000000*iHit->energyLoss()); //plot in keV
 
         //if( planeNo < 0 || planeNo > 2 ) throw cms::Exception("PlaneNumberIssue") << "Plane number not 0,1,2. " << hitDebug; 
@@ -728,10 +715,6 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             }
         }
     }//end loop over PLT hits
-    if(roc0Hit){
-        hPhiHits->Fill( muonPhi );
-        hEtaHits->Fill( muonEta );
-    }
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
         if (planeEnergy > 0.)
@@ -900,6 +883,7 @@ PLTSimHitAnalyzer::runPileupAnalysis(){
     //loop over puMap
     for(std::map<int,std::string>::const_iterator it = puFilenameMap.begin(); it != puFilenameMap.end(); ++it){
         int numPU = it->first;
+        cout << "Analyzing case where nPU = " << numPU << endl;
         std::ifstream in(it->second);
         //loop over the file and count 3 fold coincidences
         std::map< int,std::vector<int> > puHitMap;

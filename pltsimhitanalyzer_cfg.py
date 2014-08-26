@@ -8,11 +8,23 @@ options.register('outfilename',
                  VarParsing.varType.string,
                  "Name of output file"
 )
+options.register('threshold',
+                 4000,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.int,
+                 "electron threshold for writing hit to digi output"
+)
 options.register('doBeamspotStudy',
                  False,
                  VarParsing.multiplicity.singleton,
                  VarParsing.varType.bool,
                  "whether or not to do beamspot study"
+)
+options.register('doPileup',
+                 False,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.bool,
+                 "whether or not to produce pileup text files as well"
 )
 options.register('wantBinaryOutput',
                  False,
@@ -62,18 +74,19 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxE
 #source files
 # process.load("Analyzers.PLTSimHitAnalyzer.minbiaspileup_cfi")
 # process.load("Analyzers.PLTSimHitAnalyzer.muongun_largerange_cfi")
+process.load("Analyzers.PLTSimHitAnalyzer.temp_cfi")
 # phi = 0
 # if not options.phiAtZero:
 # 	phi = 225
 # process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
 
-process.source = cms.Source("PoolSource",
-		fileNames = cms.untracked.vstring(
-			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
-			#'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_18_1_OfZ.root'
-			'/store/user/skaplan/noreplica/MinBias14TeV/outfile14TeVSKIM_313_1_qk7.root'
-		)
-)
+# process.source = cms.Source("PoolSource",
+# 		fileNames = cms.untracked.vstring(
+# 			#"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
+# 			#'/store/user/skaplan/MinBiasBeamSpotPhi0R0/outfile14TeV_18_1_OfZ.root'
+# 			'/store/user/skaplan/noreplica/MinBias14TeV/outfile14TeVSKIM_313_1_qk7.root'
+# 		)
+# )
 
 process.TFileService = cms.Service("TFileService",
         fileName = cms.string(options.outfilename)
@@ -91,8 +104,8 @@ process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
 	#r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
 	digiFileName = cms.string(digifilename),
-	# doPileup = cms.bool(False),
-	threshold = cms.int32(4000),
+	doPileup = cms.bool(options.doPileup),
+	threshold = cms.int32(options.threshold),
     wantBinaryOutput = cms.bool(options.wantBinaryOutput) #flag to create additional binary output as well as the text
 )
 
