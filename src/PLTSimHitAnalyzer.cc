@@ -34,6 +34,8 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
+#include "SimDataFormats/Track/interface/SimTrack.h"
+
 #include "SimDataFormats/Vertex/interface/SimVertex.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 
@@ -254,6 +256,11 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
         threshold = iConfig.getParameter<int>("threshold");
         wantBinaryOutput = (iConfig.exists("wantBinaryOutput") ? iConfig.getParameter<bool>("wantBinaryOutput") : false);
     }
+    else{ //set to some dummy values to not have issues later
+        digiFileName = "";
+        threshold = 0;
+        wantBinaryOutput = false;
+    }
     doBeamspotStudy = (iConfig.exists("doBeamspotStudy") ? iConfig.getParameter<bool>("doBeamspotStudy") : false);
     phiAtZero = (iConfig.exists("phiAtZero") ? iConfig.getParameter<bool>("phiAtZero") : true);
     runFourTelescopes = (iConfig.exists("runFourTelescopes") ? iConfig.getParameter<bool>("runFourTelescopes") : false);
@@ -265,6 +272,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //print options to screen
     std::cout << "PLTSimHitAnalyzer run with the following options:\n" << std::endl;
     std::cout << "inDigiMode = " << inDigiMode << std::endl;
+    std::cout << "wantBinaryOutput = " << wantBinaryOutput << std::endl;
     std::cout << "doPileup = " << doPileup << std::endl;
     std::cout << "doBeamspotStudy = " << doBeamspotStudy << std::endl;
 
@@ -541,6 +549,19 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     
     edm::Handle< std::vector< reco::GenParticle > > particleHandle;
     iEvent.getByLabel("genParticles",particleHandle);
+
+    // edm::Handle< std::vector< SimTrack > > simTrackHandle;
+    // bool simTracksPresent = iEvent.getByLabel("g4SimHits",simTrackHandle);
+
+    // //do SimTracks stuff here:
+    // if(simTracksPresent){
+    //     for(std::vector<SimTrack>::const_iterator iTrack = simTrackHandle->begin(); iTrack != simTrackHandle->end(); ++iTrack){
+    //         const math::XYZTLorentzVectorD trackP4 = iTrack->trackerSurfaceMomentum();
+    //         double trackPx = trackP4.px();
+    //         double trackPy = trackP4.py();
+    //         double trackPt = sqrt(trackPx*trackPx + trackPy*trackPy);
+    //     }
+    // }
 
     // edm::Handle< std::vector< reco::Vertex > > vertexHandle;
     // iEvent.getByLabel("offlinePrimaryVertices",vertexHandle);
