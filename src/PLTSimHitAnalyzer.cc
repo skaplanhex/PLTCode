@@ -133,6 +133,7 @@ private:
     TH1D* simVertexMult;
     TH1D* hPhiHits;
     TH1D* hEtaHits;
+    TH1D* hHitPt;
     
     //pixel maps
     TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
@@ -703,6 +704,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         hhitmomentum->Fill(mom);
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
+        double coshEta = cosh(eta);
+        double hitPt = mom/coshEta;
+        hHitPt->Fill(hitPt);
         hSimHitTheta->Fill(theta);
         heta->Fill(eta);
         htof->Fill(iHit->timeOfFlight());
@@ -794,6 +798,7 @@ PLTSimHitAnalyzer::beginJob()
     simVertexMult = fs->make<TH1D>("simVertexMult","SimVertex Multiplicity",101,-0.5,100.5);
     hPhiHits = fs->make<TH1D>("hPhiHits","Events with At Least One Hit vs. Phi",1000,1.8,2.1);
     hEtaHits = fs->make<TH1D>("hEtaHits","Events with At Least One Hit vs. Eta",1000,3.9,4.6);
+    hHitPt = fs->make<TH1D>("hHitPt","pT of PLT PSimHits",500,0,50);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
