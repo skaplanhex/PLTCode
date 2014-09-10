@@ -86,12 +86,11 @@ process.maxEvents = cms.untracked.PSet( input = cms.untracked.int32(options.maxE
 #   phi = 225
 # process.load("Analyzers.PLTSimHitAnalyzer.MinBiasBeamSpotPhi%iR%i_cfi"%(phi,options.r))
 
+#if cfi file passed in at runtime, use it as input
 if options.inputCfi != "DUMMY":
-    print "not dummy!"
     process.load("Analyzers.PLTSimHitAnalyzer."+options.inputCfi)
-
+#if no file is passed in at runtime, use this as the input
 else:
-    print "dummy"
     process.source = cms.Source("PoolSource",
             fileNames = cms.untracked.vstring(
                 #"file:/uscms_data/d3/skaplan/PLT/sim/CMSSW_7_1_0_pre4/src/outfile14TeV.root"
@@ -116,9 +115,9 @@ process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
     #phiAtZero = cms.bool(options.phiAtZero),
     #r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
-    # digiFileName = cms.string(digifilename),
+    digiFileName = cms.string(digifilename),
     # doPileup = cms.bool(options.doPileup),
-    # threshold = cms.int32(options.threshold),
+    threshold = cms.int32(options.threshold),
     wantBinaryOutput = cms.bool(options.wantBinaryOutput) #flag to create additional binary output as well as the text
 )
 
