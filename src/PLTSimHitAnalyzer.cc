@@ -63,7 +63,6 @@ using namespace std;
 
 
 //declare PLTHit class to make integrating the binary conversion code easier
-//maybe use this for the main analyzer section as well?
 class PLTHit {
 public:
     PLTHit(int channel, int roc, int column, int row, int adc, int event)
@@ -82,6 +81,29 @@ private:
     int row;
     int adc;
     int event;
+
+};
+//hopefully makes life easier in analyze method
+class PLTSimHit {
+public:
+    PLTSimHit(int channel, int roc, int column, int row, int adc, double pt, double eta)
+        :channel(channel),roc(roc),column(column),row(row),adc(adc),pt(pt),eta(eta){};
+    ~PLTSimHit(){};
+    int Channel(){ return channel; }
+    int ROC(){ return roc; }
+    int Column(){ return column; }
+    int Row(){ return row; }
+    int ADC(){ return adc; }
+    double Pt(){ return pt; }
+    double Eta(){ return eta; }
+private:
+    int channel;
+    int roc;
+    int column;
+    int row;
+    int adc;
+    double pt;
+    double eta;
 
 };
 
@@ -111,6 +133,7 @@ private:
     virtual int getPUEventNumber(int, int);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
+    virtual std::vector<PLTSimHit*> initializeHitVector(int,int,int,int,int,double,double);
     virtual void runPileupAnalysis();
     virtual void makeBinary();
     
@@ -134,6 +157,7 @@ private:
     TH1D* hPhiHits;
     TH1D* hEtaHits;
     TH1D* hHitPt;
+    TH1D* h3foldPt;
     
     //pixel maps
     TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
@@ -525,6 +549,13 @@ PLTSimHitAnalyzer::maskTelescope(int tel){
     else
         return false;
 }
+std::vector<PLTSimHit*> 
+PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row, int adc, double pt, double eta){
+    std::vector<PLTSimHit*> hitVector;
+    hitVector.push_back( new PLTSimHit(channel,roc,column,row,adc,pt,eta) );
+    return hitVector;
+
+}
 // ------------ method called for each event  ------------
 void
 PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
@@ -571,7 +602,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     // simVertexMult->Fill(vertexHandle->size());
 
     //keeps track of hit locations to easily count 3-fold coincidences
-    std::map< int,std::vector<int> > hitTracker;
+    std::map< int,std::vector<PLTSimHit*> > hitTracker;
     
     //keeps track of eloss in each ROC
     std::map< int,double > energyTracker; 
@@ -656,51 +687,6 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         // three digit address giving side of IP, half carriage, and telescope
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
 
-        //separate conditions by beamspot study or no
-
-        //only count ROC2 hits for 3-fold coincidence if they pass the pixel mask
-        if ( doBeamspotStudy && (!runFourTelescopes) ) {
-            if (hitTracker.count(planeLoc) == 0) {
-                if (planeNo != 2)
-                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                if (planeNo != 2)
-                    hitTracker[planeLoc].push_back(planeNo);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc].push_back(planeNo);
-            }
-        }
-        else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
-            if (hitTracker.count(planeLoc) == 0) {
-                if (planeNo != 2)
-                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                if (planeNo != 2)
-                    hitTracker[planeLoc].push_back(planeNo);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc].push_back(planeNo);
-            }
-        }
-        else{
-            // if there hasn't been a hit in that telescope yet
-            if (hitTracker.count(planeLoc) == 0) {
-                hitTracker[planeLoc] = std::vector<int>(1,planeNo);
-                //std::cout << "Telescope Added" << std::endl;
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                hitTracker[planeLoc].push_back(planeNo);
-                //std::cout << "Hit added to telescope" << std::endl;
-            }
-        }
         hhitmomentum->Fill(mom);
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
@@ -739,6 +725,51 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
                 }
             }
         }
+        //separate conditions by beamspot study or no
+
+        //only count ROC2 hits for 3-fold coincidence if they pass the pixel mask
+        if ( doBeamspotStudy && (!runFourTelescopes) ) {
+            if (hitTracker.count(planeLoc) == 0) {
+                if (planeNo != 2)
+                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                if (planeNo != 2)
+                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+            }
+        }
+        else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
+            if (hitTracker.count(planeLoc) == 0) {
+                if (planeNo != 2)
+                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                if (planeNo != 2)
+                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+            }
+        }
+        else{
+            // if there hasn't been a hit in that telescope yet
+            if (hitTracker.count(planeLoc) == 0) {
+                hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+                //std::cout << "Telescope Added" << std::endl;
+            }
+            // if there has been a hit, add the plane number of this hit to the others
+            else{
+                hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+                //std::cout << "Hit added to telescope" << std::endl;
+            }
+        }
     }//end loop over PLT hits
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
@@ -746,8 +777,9 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             helossPlane->Fill( planeEnergy );
     }
     //loop through the hit tracker to see if there are any 3-fold coincidences
-    for (std::map< int , std::vector<int> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
-        std::vector<int> telHits = iTel->second;
+    for (std::map< int , std::vector<PLTSimHit*> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
+        std::vector<PLTSimHit*> telHits = iTel->second;
+        std::vector<double> hitPts(3,-1.); //initializes with length=3 and entries each=-1.
         if (telHits.size()<3) {
             continue;
         }
@@ -756,7 +788,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             bool containsOne = false;
             bool containsTwo = false;
             for (unsigned int i = 0; i < telHits.size(); i++) {
-                int pNo = telHits.at(i); //plane number of hit in given telescope
+                int pNo = telHits.at(i)->ROC(); //plane number of hit in given telescope
+                //double thisHitPt = telHits.at(i)->Pt();
                 if (pNo == 0) {
                     containsZero = true;
                 }
@@ -799,6 +832,7 @@ PLTSimHitAnalyzer::beginJob()
     hPhiHits = fs->make<TH1D>("hPhiHits","Events with At Least One Hit vs. Phi",1000,1.8,2.1);
     hEtaHits = fs->make<TH1D>("hEtaHits","Events with At Least One Hit vs. Eta",1000,3.9,4.6);
     hHitPt = fs->make<TH1D>("hHitPt","pT of PLT PSimHits",500,0,50);
+    h3foldPt = fs->make<TH1D>("h3foldPt","pT of 3-fold coincidence track",500,0,50);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
