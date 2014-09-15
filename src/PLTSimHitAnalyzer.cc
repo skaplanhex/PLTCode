@@ -230,6 +230,7 @@ private:
     int threeFoldCount;
     std::ofstream hitInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
+    std::ofstream radiationInfo;
     //std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
     bool doPileup;
@@ -267,6 +268,7 @@ private:
 PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 
 {
+    radiationInfo.open("radiationInfo.txt");
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
     inDigiMode = iConfig.exists("digiFileName") && iConfig.exists("threshold");
@@ -356,6 +358,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode && !wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
     if (doBeamspotStudy) beamspotInfo.close();
+    radiationInfo.close();
     
 }
 
@@ -688,6 +691,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
 
         hhitmomentum->Fill(mom);
+        if (planeNo == 0) radiationInfo << mom << "\n";
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
         double coshEta = cosh(eta);

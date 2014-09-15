@@ -99,6 +99,7 @@ else:
                 "/store/user/skaplan/noreplica/MinBias_WithSimTracks/outfile14TeVSKIM_33_1_oLh.root"
             )
     )
+process.source.duplicateCheckMode = cms.untracked.string('noDuplicateCheck')
 
 process.TFileService = cms.Service("TFileService",
         fileName = cms.string(options.outfilename)
@@ -115,9 +116,9 @@ process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
     #phiAtZero = cms.bool(options.phiAtZero),
     #r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
-    digiFileName = cms.string(digifilename),
+    # digiFileName = cms.string(digifilename),
     # doPileup = cms.bool(options.doPileup),
-    threshold = cms.int32(options.threshold),
+    # threshold = cms.int32(options.threshold),
     wantBinaryOutput = cms.bool(options.wantBinaryOutput) #flag to create additional binary output as well as the text
 )
 

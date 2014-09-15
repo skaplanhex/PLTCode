@@ -2,11 +2,11 @@
 
 import os, sys
 
-for pt in ("05","5","50"):
+for pt in ("005",):
     for eta in ("Full","Center"):
         for phi in ("Full","Center"):
-            for sigmaZ in ("Large","Small"):
-                folder = "MuonGunPt%s/%sEta_%sPhi_%sSigmaZ/"%(pt,eta,phi,sigmaZ)
+            for sigmaZ in ("20","Small"):
+                folder = "AntiMuonGunPt%s/%sEta_%sPhi_%sSigmaZ/"%(pt,eta,phi,sigmaZ)
                 eospath = "/eos/uscms/store/user/skaplan/noreplica/"
                 shortpath = "/store/user/skaplan/noreplica/"
                 fullpath = eospath+folder
@@ -14,7 +14,7 @@ for pt in ("05","5","50"):
                 outfilesnew=[]
                 for f in outfiles:
                     outfilesnew.append("        '"+shortpath + folder + f + "',")
-                out = open("MuonGunPt%s_%sEta_%sPhi_%sSigmaZ"%(pt,eta,phi,sigmaZ)+"_cfi.py",'w')
+                out = open("AntiMuonGunPt%s_%sEta_%sPhi_%sSigmaZ"%(pt,eta,phi,sigmaZ)+"_cfi.py",'w')
                 out.write("import FWCore.ParameterSet.Config as cms\n")
                 out.write("\n")
                 out.write('source = cms.Source("PoolSource",\n')
