@@ -50,6 +50,18 @@ options.register('r',
                  VarParsing.varType.int,
                  "value of r_beamspot"
 )
+options.register('cylinderdZ',
+                3.0,
+                VarParsing.multiplicity.singleton,
+                VarParsing.varType.float,
+                "delta Z of cylinder used to test if 3-fold coinc is from IP"
+)
+options.register('cylinderR',
+                29.0,
+                VarParsing.multiplicity.singleton,
+                VarParsing.varType.float,
+                "radius of cylinder used to test if 3-fold coinc is from IP"
+)
 options.register('inputCfi',
                 'DUMMY',
                 VarParsing.multiplicity.singleton,
@@ -116,10 +128,12 @@ process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
     #phiAtZero = cms.bool(options.phiAtZero),
     #r = cms.int32(options.r),
         #runFourTelescopes = cms.bool(options.runFourTelescopes),
-    # digiFileName = cms.string(digifilename),
-    # doPileup = cms.bool(options.doPileup),
-    # threshold = cms.int32(options.threshold),
-    wantBinaryOutput = cms.bool(options.wantBinaryOutput) #flag to create additional binary output as well as the text
+    digiFileName = cms.string(digifilename),
+    doPileup = cms.bool(options.doPileup),
+    threshold = cms.int32(options.threshold),
+    wantBinaryOutput = cms.bool(options.wantBinaryOutput), #flag to create additional binary output as well as the text
+    cylinderR = cms.double(options.cylinderR),
+    cylinderdZ = cms.double(options.cylinderdZ)
 )
 
 

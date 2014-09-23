@@ -34,6 +34,8 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
+#include "DataFormats/GeometryVector/interface/LocalVector.h"
+
 #include "SimDataFormats/Track/interface/SimTrack.h"
 
 #include "SimDataFormats/Vertex/interface/SimVertex.h"
@@ -130,7 +132,11 @@ private:
     virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&);
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
+    virtual int getROC(const PSimHit&);
+    virtual bool aboveThreshold(const PSimHit&);
     virtual int getPUEventNumber(int, int);
+    virtual std::tuple<double,double> PixelGlobalXY(int,int);
+    virtual bool isFromIP(const PSimHit&);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual std::vector<PLTSimHit*> initializeHitVector(int,int,int,int,int,double,double);
@@ -158,6 +164,8 @@ private:
     TH1D* hEtaHits;
     TH1D* hHitPt;
     TH1D* h3foldPt;
+    TH1D* hrMin;
+    TH1D* hrMax;
     
     //pixel maps
     TH2D* PlusZ_PlusX_Tel0_ROC0_PixelMap;
@@ -230,7 +238,11 @@ private:
     int threeFoldCount;
     std::ofstream hitInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
-    std::ofstream radiationInfo;
+
+    double cylinderdZ;
+    double cylinderR;
+    std::tuple<double,double,double> beamSpotPoint;
+
     //std::ofstream hitInfo_ThreeFold;
     bool inDigiMode;
     bool doPileup;
@@ -243,12 +255,10 @@ private:
     int threshold;
     long eventCounter;
     int eventsWithThreeFoldCoin;
-    std::map< int,int > nPUEventCounterMap; //key = #PU events we are looking at, value = #pileup events currently counted for that scenario
-    std::map< int,int > puEventNumberMap; //key = #PU events, value = current "event number" that will be incremented when the nPUEventCounterMap count = its key + 1
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
     std::map< int,std::string > puFilenameMap;
-    std::map< int,double > puAccepMap;
-    std::map< int,int > threeFoldMap; //for 3-fold coincidences in different pileup scenarios
+    std::map< int,int > puThreeFoldMap; // key = #PU events, value = # of 3 fold coincidences for that PU scenario
+    std::vector<int> puScenarios;
     typedef std::map<int,std::ofstream*>::iterator puIter;
     // typedef std::tuple<int,int,int,int,int,int> PLTHit;
     
@@ -268,7 +278,6 @@ private:
 PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 
 {
-    radiationInfo.open("radiationInfo.txt");
     //now do what ever initialization is needed
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
     inDigiMode = iConfig.exists("digiFileName") && iConfig.exists("threshold");
@@ -326,7 +335,10 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //pileup stuff
     if (doPileup){
         //just in this one place, define all the pileup scenarios under study
-        std::vector<int> puScenarios;
+        puScenarios.push_back(0);
+        puScenarios.push_back(1);
+        puScenarios.push_back(2);
+        puScenarios.push_back(3);
         puScenarios.push_back(5);
         puScenarios.push_back(10);
         puScenarios.push_back(15);
@@ -342,10 +354,10 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
             ss << "puTextFiles/"+digiFileName+"_PU" << nPU << ".txt";
             puFilenameMap[nPU] = ss.str();
             puMap[nPU] = new std::ofstream(puFilenameMap[nPU]);
-            nPUEventCounterMap[nPU] = 1; //initialize all these to one to let the first event be the first counted (duh)
-            puEventNumberMap[nPU] = 1; //start at eventNum = 1
         }
-
+        cylinderR = (iConfig.exists("cylinderR") ? iConfig.getParameter<double>("cylinderR") : 0. );
+        cylinderdZ = (iConfig.exists("cylinderdZ") ? iConfig.getParameter<double>("cylinderdZ") : 0. );
+        beamSpotPoint = std::make_tuple(0.,0.,0.);
     }
     
 }
@@ -358,7 +370,6 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode && !wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
     if (doBeamspotStudy) beamspotInfo.close();
-    radiationInfo.close();
     
 }
 
@@ -454,6 +465,13 @@ PLTSimHitAnalyzer::analyzeDetId(int detid){
 }
 
 int
+PLTSimHitAnalyzer::getROC(const PSimHit& hit){
+    int detid = hit.detUnitId();
+    std::vector<int> infoVector = analyzeDetId(detid);
+    return infoVector.at(3);
+}
+
+int
 PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
     int channelNum = -1;
     if(pltNum == 0){
@@ -546,6 +564,13 @@ PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
         return false;
 }
 bool
+PLTSimHitAnalyzer::aboveThreshold(const PSimHit& hit){
+
+    double numberOfElectrons = ( (hit.energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
+    if (numberOfElectrons > threshold) return true;
+    else return false;
+}
+bool
 PLTSimHitAnalyzer::maskTelescope(int tel){
     if ( (tel == 1) || (tel == 3) )
         return true;
@@ -559,26 +584,90 @@ PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row
     return hitVector;
 
 }
+std::tuple<double,double>
+PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
+    // FOR ROC0 ONLY!!!
+
+    // some geometry measurments needed (all length measurments are in mm unless I say otherwise)
+    const double PIXELHEIGHT = 0.1;
+    const double PIXELWIDTH = 0.15;
+    const double ROW0_R = 52.6;
+    const double COLUMN0_X = -3.825;
+
+    double rowR = ROW0_R - row*PIXELHEIGHT; //minus sign because row 79 is lowest in y
+    double columnX = COLUMN0_X + column*PIXELWIDTH; // columns go up in x
+
+    return std::make_tuple(columnX,rowR);
+
+}
+bool
+PLTSimHitAnalyzer::isFromIP(const PSimHit& hit){
+
+    // Get pixel address, this will set x0,y0,z0 for a linear fit. Extrapolate line using momentum vector
+
+    // beamspot info
+    double bsX,bsY,bsZ;
+    std::tie(bsX,bsY,bsZ) = beamSpotPoint;
+
+    int detid = hit.detUnitId();
+    LocalVector direction = hit.momentumAtEntry().unit();
+    // multiply each component by -1 to flip the vector
+    double slopeX = (-5.e-3)*direction.x();
+    double slopeY = (-5.e-3)*direction.y();
+    double slopeZ = (-5.e-3)*direction.z();
+
+    // cout << "slopes: " << slopeX << " " << slopeY << " " << slopeZ << endl;
+
+    std::vector<int> infoVector = analyzeDetId(detid);
+    if (infoVector.size() != 6) throw cms::Exception("DetID Issue") << "There's an issue with the hit detid!!\n"; 
+    // int pltNo = infoVector.at(0);
+    // int halfCarriageNo = infoVector.at(1);
+    // int telNo = infoVector.at(2);
+    // int planeNo = infoVector.at(3);
+    int rowNo = infoVector.at(4);
+    int columnNo = infoVector.at(5);
+
+    // global xyz coordinates of the hit
+    double hitX,hitY,hitZ;
+    std::tie(hitX,hitY) = PixelGlobalXY(rowNo,columnNo);
+    hitZ = 1726.75; // front face of ROC0, same for all hits
+    // cout << "hit location: " << hitX << " " << hitY << " " << hitZ << endl;
+
+    // make line as a parametric function in 3D
+    int nSteps = 1000000;
+    double rMin = 1e9;
+    double rMax = -1;
+    bool fromIP = false;
+    for(int iStep = 1; iStep < nSteps; iStep++){
+
+        //get x,y,z of this step, check if it's in the cylinder
+        double x = hitX + slopeX*iStep;
+        double y = hitY + slopeY*iStep;
+        double z = hitZ + slopeZ*iStep;
+
+        double rFromBS = sqrt( (x-bsX)*(x-bsX) + (y-bsY)*(y-bsY) );
+        double zFromBS = fabs(z-bsZ);
+
+        if (rFromBS < rMin && zFromBS < cylinderdZ/2.) rMin = rFromBS;
+        if (rFromBS > rMax && zFromBS < cylinderdZ/2.) rMax = rFromBS;
+
+        //if (iStep % 50000 == 0 || iStep == 1 || fabs(z)<cylinderdZ/2.) cout << "point on track: " << iStep << " " << x << " " << y << " " << z << endl;
+
+        // if the coordinates are in the cylinder
+        if ( rFromBS<cylinderR && zFromBS < cylinderdZ/2. ) fromIP = true;
+    }
+    hrMin->Fill(rMin);
+    hrMax->Fill(rMax);
+    return fromIP;
+
+}
 // ------------ method called for each event  ------------
 void
 PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
 
     eventCounter++;
-    //look to see where the nPU counter is for each scenario. If the scenario is for example nPU=5, then after the 6th event (i.e. at the beginning of the 7th), I should start a new event.
-    if (doPileup){
-        for(std::map<int,int>::iterator it = puEventNumberMap.begin(); it != puEventNumberMap.end(); ++it){
-            int numPU = it->first;
-            if( nPUEventCounterMap[numPU] == (numPU+2) ){
-                puEventNumberMap[numPU]++;
-                nPUEventCounterMap[numPU] = 1; // =1 because as the analyze() method continues, this will be the first event contribution to the new PU event
-            }
-            else
-                nPUEventCounterMap[numPU]++;
-        }
-    }
 
-    
     edm::Handle<PSimHitContainer> simHitHandle;
     iEvent.getByLabel(simHitLabel,simHitHandle);
     
@@ -605,7 +694,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     // simVertexMult->Fill(vertexHandle->size());
 
     //keeps track of hit locations to easily count 3-fold coincidences
-    std::map< int,std::vector<PLTSimHit*> > hitTracker;
+    std::map< int,std::vector<PSimHit> > hitTracker;
     
     //keeps track of eloss in each ROC
     std::map< int,double > energyTracker; 
@@ -624,6 +713,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         }
     }
     for (PSimHitContainer::const_iterator iHit = simHitHandle->begin(); iHit != simHitHandle->end(); ++iHit) {
+        PSimHit hit = *(&(*iHit));
+        if ( !aboveThreshold(hit) ) continue;
         //std::cout << "HIT!!!" << std::endl;
         double mom = iHit->pabs();
         int detid = iHit->detUnitId();
@@ -691,7 +782,6 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
 
         hhitmomentum->Fill(mom);
-        if (planeNo == 0) radiationInfo << mom << "\n";
         double theta = iHit->thetaAtEntry();
         double eta = -log(tan(theta/2.));
         double coshEta = cosh(eta);
@@ -725,55 +815,57 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
                 //for each pileup scenario
                 for(puIter it = puMap.begin(); it != puMap.end(); ++it){
                     int numPU = it->first;
-                    ( *(it->second) ) << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << puEventNumberMap[numPU] << "\n";
+                    ( *(it->second) ) << channelNum << " " << planeNo << " " << columnNo << " " << rowNo << " " << adc << " " << getPUEventNumber(eventCounter,numPU) << "\n";
                 }
             }
         }
         //separate conditions by beamspot study or no
 
         //only count ROC2 hits for 3-fold coincidence if they pass the pixel mask
-        if ( doBeamspotStudy && (!runFourTelescopes) ) {
-            if (hitTracker.count(planeLoc) == 0) {
-                if (planeNo != 2)
-                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                if (planeNo != 2)
-                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-            }
-        }
-        else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
-            if (hitTracker.count(planeLoc) == 0) {
-                if (planeNo != 2)
-                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                if (planeNo != 2)
-                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-                else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-                    hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-            }
-        }
-        else{
+        // if ( doBeamspotStudy && (!runFourTelescopes) ) {
+        //     if (hitTracker.count(planeLoc) == 0) {
+        //         if (planeNo != 2)
+        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+        //     }
+        //     // if there has been a hit, add the plane number of this hit to the others
+        //     else{
+        //         if (planeNo != 2)
+        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+        //     }
+        // }
+        // else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
+        //     if (hitTracker.count(planeLoc) == 0) {
+        //         if (planeNo != 2)
+        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
+        //     }
+        //     // if there has been a hit, add the plane number of this hit to the others
+        //     else{
+        //         if (planeNo != 2)
+        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
+        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
+        //     }
+        // }
+        // else{
             // if there hasn't been a hit in that telescope yet
-            if (hitTracker.count(planeLoc) == 0) {
-                hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-                //std::cout << "Telescope Added" << std::endl;
-            }
-            // if there has been a hit, add the plane number of this hit to the others
-            else{
-                hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-                //std::cout << "Hit added to telescope" << std::endl;
-            }
+        if (hitTracker.count(planeLoc) == 0) {
+            std::vector<PSimHit> vec;
+            vec.push_back(hit);
+            hitTracker[planeLoc] = vec;
+            //std::cout << "Telescope Added" << std::endl;
         }
+        // if there has been a hit, add the plane number of this hit to the others
+        else{
+            hitTracker[planeLoc].push_back(hit);
+            //std::cout << "Hit added to telescope" << std::endl;
+        }
+        // }
     }//end loop over PLT hits
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
@@ -781,8 +873,8 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             helossPlane->Fill( planeEnergy );
     }
     //loop through the hit tracker to see if there are any 3-fold coincidences
-    for (std::map< int , std::vector<PLTSimHit*> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
-        std::vector<PLTSimHit*> telHits = iTel->second;
+    for (std::map< int , std::vector<PSimHit> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
+        std::vector<PSimHit> telHits = iTel->second;
         std::vector<double> hitPts(3,-1.); //initializes with length=3 and entries each=-1.
         if (telHits.size()<3) {
             continue;
@@ -791,10 +883,13 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             bool containsZero = false;
             bool containsOne = false;
             bool containsTwo = false;
+            std::vector<PSimHit> roc0Hits;
             for (unsigned int i = 0; i < telHits.size(); i++) {
-                int pNo = telHits.at(i)->ROC(); //plane number of hit in given telescope
+                //int pNo = telHits.at(i)->ROC(); //plane number of hit in given telescope
+                int pNo = getROC( telHits.at(i) );
                 //double thisHitPt = telHits.at(i)->Pt();
                 if (pNo == 0) {
+                    roc0Hits.push_back( telHits.at(i) );
                     containsZero = true;
                 }
                 else if (pNo == 1){
@@ -809,6 +904,19 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
                 htel3fold->Fill(iTel->first);
                 threeFoldCount++;
                 eventsWithThreeFoldCoin++;
+                if(doPileup){ //if pileup study is run, count 3 fold coincidences consistent with originating from the IP
+                    for (unsigned int i = 0; i < roc0Hits.size(); i++){
+                        if ( isFromIP( roc0Hits.at(i) ) ){
+                            //cout << "3 fold from IP!" << endl;
+                            //for each pileup scenario, increment the number of 3 fold coincidences for that scenario by 1
+                            for(unsigned int i=0; i<puScenarios.size(); i++){
+                                int nPU = puScenarios.at(i);
+                                puThreeFoldMap[nPU]++;
+                            }
+                            break; //when dealing with colinear tracks, don't break! Implement this later
+                        }
+                    }
+                }
             }
         } //end else statement (telescopes with at least three hits)
     }//end loop over telescopes
@@ -837,6 +945,8 @@ PLTSimHitAnalyzer::beginJob()
     hEtaHits = fs->make<TH1D>("hEtaHits","Events with At Least One Hit vs. Eta",1000,3.9,4.6);
     hHitPt = fs->make<TH1D>("hHitPt","pT of PLT PSimHits",500,0,50);
     h3foldPt = fs->make<TH1D>("h3foldPt","pT of 3-fold coincidence track",500,0,50);
+    hrMin = fs->make<TH1D>("hrMin","rMin",400,0,200);
+    hrMax = fs->make<TH1D>("hrMax","rMax",400,0,200);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
@@ -1190,7 +1300,17 @@ PLTSimHitAnalyzer::endJob()
         for(puIter it = puMap.begin(); it != puMap.end(); ++it){
             it->second->close();
         }
-        runPileupAnalysis();
+        //runPileupAnalysis();
+        // loop over pu 3 fold counts and write out a text file with the acceptance info
+        std::ofstream puOut;
+        puOut.open("./puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
+        for(std::map<int,int>::const_iterator it = puThreeFoldMap.begin(); it!=puThreeFoldMap.end(); ++it){
+            int nPU = it->first;
+            int n3Fold = it->second;
+            cout << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << endl;
+            puOut << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << "\n";
+        }
+        puOut.close();
     }
 
     if (doBeamspotStudy){
