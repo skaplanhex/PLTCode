@@ -34,6 +34,7 @@
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
 
+#include "DataFormats/GeometryVector/interface/LocalPoint.h"
 #include "DataFormats/GeometryVector/interface/LocalVector.h"
 
 #include "SimDataFormats/Track/interface/SimTrack.h"
@@ -47,6 +48,8 @@
 #include "DataFormats/HepMCCandidate/interface/GenParticle.h"
 
 #include "TH2D.h"
+#include "TRandom2.h"
+#include "TTree.h"
 
 #include <math.h>
 #include <map>
@@ -64,11 +67,14 @@ using namespace edm;
 using namespace std;
 
 
-//declare PLTHit class to make integrating the binary conversion code easier
+// declare PLTHit class to make integrating the binary conversion code easier
+// also helps simplify having to deal with PSimHit class (weird linking errors not worth debugging) 
 class PLTHit {
 public:
     PLTHit(int channel, int roc, int column, int row, int adc, int event)
         :channel(channel),roc(roc),column(column),row(row),adc(adc),event(event){};
+    PLTHit(float pabs, float tof, float eloss, int pdgid, unsigned int detid, float theta, float phi)
+    :thePabs(pabs),theTof(tof),theEnergyLoss(eloss),theParticleType(pdgid),theDetUnitId(detid),theThetaAtEntry(theta),thePhiAtEntry(phi){};
     ~PLTHit(){};
     int Channel(){ return channel; }
     int ROC(){ return roc; }
@@ -76,6 +82,9 @@ public:
     int Row(){ return row; }
     int ADC(){ return adc; }
     int Event(){ return event; }
+    unsigned int detUnitId(){ return theDetUnitId; }
+    float energyLoss(){ return theEnergyLoss; }
+    LocalVector momentumAtEntry(){ return LocalVector(theThetaAtEntry,thePhiAtEntry,thePabs); }
 private:
     int channel;
     int roc;
@@ -83,9 +92,16 @@ private:
     int row;
     int adc;
     int event;
+    float thePabs;          // momentum
+    float theTof;           // Time Of Flight 
+    float theEnergyLoss;    // Energy loss
+    int   theParticleType;
+    unsigned int theDetUnitId;
+    float theThetaAtEntry;
+    float thePhiAtEntry;
 
 };
-//hopefully makes life easier in analyze method
+// keep for use in beamspot study if ever needed, but I may change the class later
 class PLTSimHit {
 public:
     PLTSimHit(int channel, int roc, int column, int row, int adc, double pt, double eta)
@@ -132,15 +148,17 @@ private:
     virtual void endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&);
     virtual std::vector<int> analyzeDetId(int);
     virtual int getChannel(int,int,int);
-    virtual int getROC(const PSimHit&);
+    virtual int getChannelFromHit(PLTHit);
+    virtual int getROC(PLTHit);
     virtual bool aboveThreshold(const PSimHit&);
     virtual int getPUEventNumber(int, int);
+    virtual int countThreeFoldCoincidences(const map< int,vector<PLTHit> >&);
+    //virtual int countThreeFoldCoincidencesInCylinder(const map< int,vector<PLTHit> >&,double,double);
     virtual std::tuple<double,double> PixelGlobalXY(int,int);
-    virtual bool isFromIP(const PSimHit&);
+    virtual bool isFromIP(PLTHit);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual std::vector<PLTSimHit*> initializeHitVector(int,int,int,int,int,double,double);
-    virtual void runPileupAnalysis();
     virtual void makeBinary();
     
     // ----------member data ---------------------------
@@ -235,7 +253,6 @@ private:
     TH2D* MinusZ_MinusX_Tel3_ROC2_PixelMap;
     
     std::map< std::string,TH2D* > histMap;
-    int threeFoldCount;
     std::ofstream hitInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
 
@@ -254,13 +271,12 @@ private:
     std::string digiFileName;
     int threshold;
     long eventCounter;
-    int eventsWithThreeFoldCoin;
+    std::map<int,int> eventsWithThreeFoldCoin;
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
     std::map< int,std::string > puFilenameMap;
-    std::map< int,int > puThreeFoldMap; // key = #PU events, value = # of 3 fold coincidences for that PU scenario
+    std::map< int,int > threeFoldMap; // key = #PU events, value = # of 3 fold coincidences for that PU scenario. Will always be used with nPU=0 (main events only, i.e. doPileup=false)
     std::vector<int> puScenarios;
     typedef std::map<int,std::ofstream*>::iterator puIter;
-    // typedef std::tuple<int,int,int,int,int,int> PLTHit;
     
 };
 
@@ -303,7 +319,6 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     r = (iConfig.exists("r") ? iConfig.getParameter<int>("r") : 0);
     if( (doBeamspotStudy) && ( !iConfig.exists("r") || !iConfig.exists("phiAtZero") )  ) //if both r and phiAtZero are not passed if doing beamspot study
         throw cms::Exception("BeamSpotIssue") << "BeamSpot mode not set up properly. Make sure BOTH phiAtZero AND r are both set!\n";
-    threeFoldCount = 0;
 
     //print options to screen
     std::cout << "PLTSimHitAnalyzer run with the following options:\n" << std::endl;
@@ -330,12 +345,11 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     }
     // hitInfo_ThreeFold.open(digiFileName+"_threefold.txt");
     eventCounter = 0;
-    eventsWithThreeFoldCoin = 0;
+    eventsWithThreeFoldCoin[0] = 0;
 
     //pileup stuff
     if (doPileup){
         //just in this one place, define all the pileup scenarios under study
-        puScenarios.push_back(0);
         puScenarios.push_back(1);
         puScenarios.push_back(2);
         puScenarios.push_back(3);
@@ -465,7 +479,7 @@ PLTSimHitAnalyzer::analyzeDetId(int detid){
 }
 
 int
-PLTSimHitAnalyzer::getROC(const PSimHit& hit){
+PLTSimHitAnalyzer::getROC(PLTHit hit){
     int detid = hit.detUnitId();
     std::vector<int> infoVector = analyzeDetId(detid);
     return infoVector.at(3);
@@ -544,6 +558,13 @@ PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
     }
     return channelNum;
 }
+int
+PLTSimHitAnalyzer::getChannelFromHit(PLTHit hit){
+    int detid = hit.detUnitId();
+    vector<int> infoVector = analyzeDetId(detid);
+    if (infoVector.size() != 6) cout << "Issue with detid!!!" << endl;
+    return getChannel( infoVector.at(0),infoVector.at(1),infoVector.at(2) );
+}
 //every event number will be either a "signal" MinBias event or a "pileup" MinBias event -- figure out which signal event each event number corresponds to
 int
 PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){ 
@@ -584,6 +605,58 @@ PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row
     return hitVector;
 
 }
+int
+PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& hitTracker){
+
+    int threeFoldCount = 0;
+    for (std::map< int , std::vector<PLTHit> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
+        std::vector<PLTHit> telHits = iTel->second;
+        std::vector<double> hitPts(3,-1.); //initializes with length=3 and entries each=-1.
+        if (telHits.size()<3) {
+            continue;
+        }
+        else{
+            bool containsZero = false;
+            bool containsOne = false;
+            bool containsTwo = false;
+            std::vector<PLTHit> roc0Hits;
+            for (unsigned int i = 0; i < telHits.size(); i++) {
+                //int pNo = telHits.at(i)->ROC(); //plane number of hit in given telescope
+                int pNo = getROC( telHits.at(i) );
+                //double thisHitPt = telHits.at(i)->Pt();
+                if (pNo == 0) {
+                    roc0Hits.push_back( telHits.at(i) );
+                    containsZero = true;
+                }
+                else if (pNo == 1){
+                    containsOne = true;
+                }
+                else if (pNo == 2){
+                    containsTwo = true;
+                }
+            }
+            bool existsThreeFoldCoin = containsZero && containsOne && containsTwo; //if >=3 hits distributed among all three planes
+            if (existsThreeFoldCoin) {
+                htel3fold->Fill(iTel->first);
+                threeFoldCount++;
+                // if(doPileup){ //if pileup study is run, count 3 fold coincidences consistent with originating from the IP
+                //     for (unsigned int i = 0; i < roc0Hits.size(); i++){
+                //         if ( isFromIP( roc0Hits.at(i) ) ){
+                //             //cout << "3 fold from IP!" << endl;
+                //             //for each pileup scenario, increment the number of 3 fold coincidences for that scenario by 1
+                //             for(unsigned int i=0; i<puScenarios.size(); i++){
+                //                 int nPU = puScenarios.at(i);
+                //                 puThreeFoldMap[nPU]++;
+                //             }
+                //             break; //when dealing with colinear tracks, don't break! Implement this later
+                //         }
+                //     }
+                // }
+            }
+        } //end else statement (telescopes with at least three hits)
+    }//end loop over telescopes
+    return threeFoldCount;
+}
 std::tuple<double,double>
 PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
     // FOR ROC0 ONLY!!!
@@ -601,7 +674,7 @@ PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
 
 }
 bool
-PLTSimHitAnalyzer::isFromIP(const PSimHit& hit){
+PLTSimHitAnalyzer::isFromIP(PLTHit hit){
 
     // Get pixel address, this will set x0,y0,z0 for a linear fit. Extrapolate line using momentum vector
 
@@ -694,7 +767,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     // simVertexMult->Fill(vertexHandle->size());
 
     //keeps track of hit locations to easily count 3-fold coincidences
-    std::map< int,std::vector<PSimHit> > hitTracker;
+    std::map< int,std::vector<PLTHit> > hitTracker; //hits from main event
     
     //keeps track of eloss in each ROC
     std::map< int,double > energyTracker; 
@@ -779,7 +852,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
             hRocNum->Fill(planeNo);
         }
         // three digit address giving side of IP, half carriage, and telescope
-        int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
+        // int planeLoc = 100*pltNo + 10*halfCarriageNo + telNo;
 
         hhitmomentum->Fill(mom);
         double theta = iHit->thetaAtEntry();
@@ -854,73 +927,115 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         // }
         // else{
             // if there hasn't been a hit in that telescope yet
-        if (hitTracker.count(planeLoc) == 0) {
-            std::vector<PSimHit> vec;
-            vec.push_back(hit);
-            hitTracker[planeLoc] = vec;
+        PLTHit newHit(hit.pabs(),hit.timeOfFlight(),hit.energyLoss(),hit.particleType(),hit.detUnitId(),hit.thetaAtEntry(),hit.phiAtEntry());
+        if (hitTracker.count(channelNum) == 0) {
+            std::vector<PLTHit> vec;
+            vec.push_back(newHit);
+            hitTracker[channelNum] = vec;
             //std::cout << "Telescope Added" << std::endl;
         }
         // if there has been a hit, add the plane number of this hit to the others
         else{
-            hitTracker[planeLoc].push_back(hit);
+            hitTracker[channelNum].push_back(newHit);
             //std::cout << "Hit added to telescope" << std::endl;
         }
         // }
     }//end loop over PLT hits
+
     for(int i = 0; i != 3; i++){
         double planeEnergy = 1000000.*energyTracker.at(i); //GeV -> keV
         if (planeEnergy > 0.)
             helossPlane->Fill( planeEnergy );
     }
-    //loop through the hit tracker to see if there are any 3-fold coincidences
-    for (std::map< int , std::vector<PSimHit> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
-        std::vector<PSimHit> telHits = iTel->second;
-        std::vector<double> hitPts(3,-1.); //initializes with length=3 and entries each=-1.
-        if (telHits.size()<3) {
-            continue;
+
+    //add in hits from pileup
+    map<int,TTree*> puTreeMap;
+    map<int,map< int,vector<PLTHit> >> puHitTracker; //hits from main event + hits from PU in all PU scenarios (keys)
+    if (doPileup){
+        TFile puInFile("pileuptree.root"); 
+
+        for (unsigned int i = 0; i<puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            // NOTE: GET THE TREE CORRESPONDING TO THAT PU SCENARIO!
+            // PUT ALL TREES IN ROOT FILE FIRST!!!! DO IT IN A WAY THAT'S EASY FOR THE LOOP TO DETERMINE WHICH TO USE AUTOMATICALLY
+            TTree* tree = (TTree*)( puInFile.Get("produce/tree") );
+            puTreeMap[nPU] = tree;
         }
-        else{
-            bool containsZero = false;
-            bool containsOne = false;
-            bool containsTwo = false;
-            std::vector<PSimHit> roc0Hits;
-            for (unsigned int i = 0; i < telHits.size(); i++) {
-                //int pNo = telHits.at(i)->ROC(); //plane number of hit in given telescope
-                int pNo = getROC( telHits.at(i) );
-                //double thisHitPt = telHits.at(i)->Pt();
-                if (pNo == 0) {
-                    roc0Hits.push_back( telHits.at(i) );
-                    containsZero = true;
-                }
-                else if (pNo == 1){
-                    containsOne = true;
-                }
-                else if (pNo == 2){
-                    containsTwo = true;
-                }
-            }
-            bool existsThreeFoldCoin = containsZero && containsOne && containsTwo; //if >=3 hits distributed among all three planes
-            if (existsThreeFoldCoin) {
-                htel3fold->Fill(iTel->first);
-                threeFoldCount++;
-                eventsWithThreeFoldCoin++;
-                if(doPileup){ //if pileup study is run, count 3 fold coincidences consistent with originating from the IP
-                    for (unsigned int i = 0; i < roc0Hits.size(); i++){
-                        if ( isFromIP( roc0Hits.at(i) ) ){
-                            //cout << "3 fold from IP!" << endl;
-                            //for each pileup scenario, increment the number of 3 fold coincidences for that scenario by 1
-                            for(unsigned int i=0; i<puScenarios.size(); i++){
-                                int nPU = puScenarios.at(i);
-                                puThreeFoldMap[nPU]++;
-                            }
-                            break; //when dealing with colinear tracks, don't break! Implement this later
+
+        // random number generator, 0 sets the seed randomly
+        TRandom2 tr(0);
+
+        // loop over PU scenarios and build puHitTracker
+        for(unsigned int i =0; i < puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            // cout << "nPU: " << nPU << endl;
+            //initialize hitTracker for each nPU with the hitTracker from the real event
+            puHitTracker[nPU] = hitTracker;
+            //add hits to the hittracker from pileup
+            TTree* tree = puTreeMap[nPU];
+            int treeNEvents = tree->GetEntries();
+
+            int nHits;
+            vector<float>* pabs = 0;
+            vector<float>* energyLoss = 0;
+            vector<float>* thetaAtEntry = 0;
+            vector<float>* phiAtEntry = 0;
+            vector<float>* tof = 0;
+            vector<int>* particleType = 0;
+            vector<int>* detUnitId = 0;
+            vector<int>* trackId = 0;
+
+            tree->SetBranchAddress("nHits",&nHits);
+            tree->SetBranchAddress("pabs",&pabs);
+            tree->SetBranchAddress("energyLoss",&energyLoss);
+            tree->SetBranchAddress("thetaAtEntry",&thetaAtEntry);
+            tree->SetBranchAddress("phiAtEntry",&phiAtEntry);
+            tree->SetBranchAddress("tof",&tof);
+            tree->SetBranchAddress("particleType",&particleType);
+            tree->SetBranchAddress("detUnitId",&detUnitId);
+            tree->SetBranchAddress("trackId",&trackId);
+
+            for(int j=0; j<nPU; j++){
+
+                int entryNum = tr.Integer(treeNEvents); //random integer in [0,treeNEvents-1]
+                tree->GetEntry(entryNum);
+                // cout << "got entry " << entryNum << endl;
+                // if there are no hits in this PU event, move on to the next one
+                if (nHits == 0) continue;
+                else{
+                    // loop over all the hits in the PU event, create PSimHit, find out what channel it belongs to, then add it to the puHitTracker for that channel
+                    for (int iHit=0; iHit < nHits; iHit++){
+                        PLTHit puHit(pabs->at(iHit),tof->at(iHit),energyLoss->at(iHit),particleType->at(iHit),detUnitId->at(iHit),thetaAtEntry->at(iHit),phiAtEntry->at(iHit));
+                        int puChannel = getChannelFromHit(puHit);
+                        if (puHitTracker[nPU].count(puChannel) == 0){
+                            vector<PLTHit> newVec;
+                            newVec.push_back(puHit);
+                            puHitTracker[nPU][puChannel] = newVec;
                         }
-                    }
-                }
-            }
-        } //end else statement (telescopes with at least three hits)
-    }//end loop over telescopes
-}
+                        else{
+                            puHitTracker[nPU][puChannel].push_back(puHit);
+                        }
+                    } //end loop over hits in a PUevent
+                } //end block on nPUHits>0
+            } //end loop for each PU scenario
+        } //end loop over the PU scenarios
+
+        // now analyze the puHitTracker to see if there are any 3 fold coincidences:
+
+    } //end doPileup block
+    int threeFoldCount = countThreeFoldCoincidences(hitTracker);
+    threeFoldMap[0] += threeFoldCount;
+    if (threeFoldCount > 0) eventsWithThreeFoldCoin[0]++;
+    if(doPileup){
+        for (unsigned int i = 0; i<puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            int puThreeFoldCount = countThreeFoldCoincidences(puHitTracker[nPU]);
+            threeFoldMap[nPU] += puThreeFoldCount;
+            //cout << nPU << " " << puThreeFoldCount << endl;
+        }
+    }
+      
+} //end analyze method
 
 
 // ------------ method called once each job just before starting event loop  ------------
@@ -1049,74 +1164,6 @@ PLTSimHitAnalyzer::beginJob()
     
     
 }
-void
-PLTSimHitAnalyzer::runPileupAnalysis(){
-    std::ofstream puOut("puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
-    std::cout << "Starting Pileup Analysis..." << std::endl;
-    using namespace boost::algorithm;
-    //loop over puMap
-    for(std::map<int,std::string>::const_iterator it = puFilenameMap.begin(); it != puFilenameMap.end(); ++it){
-        int numPU = it->first;
-        cout << "Analyzing case where nPU = " << numPU << endl;
-        std::ifstream in(it->second);
-        //loop over the file and count 3 fold coincidences
-        std::map< int,std::vector<int> > puHitMap;
-        std::string line;
-        int currentEvent = -100;
-        int previousEvent = -1000;
-        int puEventsWithThreeFoldCoin = 0;
-        int puNumTotalEvents = -1; // at the first line, the currentEvent > previousEvent if statement will be executed to make this 0.  At the end of the first event, this will be 1 as expected
-        while( getline(in,line) ){
-            //read in all of the values, fill the puHitMap
-            std::vector<std::string> strs;
-            split(strs,line,is_any_of(" ")); //hopefully works like python split()
-            int channel = std::stoi( strs.at(0) );
-            int ROC = std::stoi( strs.at(1) );
-            int event = std::stoi( strs.at(5) );
-            currentEvent = event;
-            if(currentEvent > previousEvent){
-                //loop over hitmap to see if there is a threefold coincidence
-                for (std::map< int , std::vector<int> >::const_iterator iTel = puHitMap.begin(); iTel != puHitMap.end(); ++iTel) {
-                    std::vector<int> telHits = iTel->second;
-                    if (telHits.size()<3) {
-                        continue;
-                    }
-                    else{
-                        bool containsZero = false;
-                        bool containsOne = false;
-                        bool containsTwo = false;
-                        for (unsigned int i = 0; i < telHits.size(); i++) {
-                            int pNo = telHits.at(i); //plane number of hit in given telescope
-                            if (pNo == 0) {
-                                containsZero = true;
-                            }
-                            else if (pNo == 1){
-                                containsOne = true;
-                            }
-                            else if (pNo == 2){
-                                containsTwo = true;
-                            }
-                        }
-                        bool existsThreeFoldCoin = containsZero && containsOne && containsTwo; //if >=3 hits distributed among all three planes
-                        if (existsThreeFoldCoin) puEventsWithThreeFoldCoin++;
-                    } //end else statement (telescopes with at least three hits)
-                }//end loop over telescopes
-                puNumTotalEvents++;
-                //forget now about last event, go to current event
-                previousEvent = currentEvent;
-                puHitMap.clear(); //clear hit map to only have it reflect this event
-            } //end if statement on new event
-            if( puHitMap.count(channel) == 0 ) puHitMap[channel] = std::vector<int>(1,ROC);
-            else puHitMap[channel].push_back(ROC);
-        } //end loop over each pileup scenario
-        in.close();
-        double accep = (1.0*puEventsWithThreeFoldCoin)/(1.0*puNumTotalEvents);
-        puOut << numPU << " " <<  puEventsWithThreeFoldCoin <<  " " << puNumTotalEvents <<  " " << accep << "\n";
-    } //end loop over pileup scenarios
-    puOut.close();
-    std::cout << "Finished Pileup Analysis" << std::endl;
-}
-
 //The vast majority of the translation to binary code was written by Dean Hidas
 void
 PLTSimHitAnalyzer::makeBinary()
@@ -1292,34 +1339,39 @@ PLTSimHitAnalyzer::endJob()
 {
     double entries = havgpixelhitcount->GetEntries();
     havgpixelhitcount->Scale(1./entries);
-    double acceptance = (1.*eventsWithThreeFoldCoin)/(1.*eventCounter);
 
+    double acceptance = 1.0*eventsWithThreeFoldCoin[0]/eventCounter;
+    cout << "(numEvents,numEventsWithThreefoldCoin,acceptance) = " << "(" << eventCounter << "," << eventsWithThreeFoldCoin[0] << "," << acceptance << ")" << endl;
     //count the acceptances as fn of nPU
     if (doPileup){
         //close the pileup file ofstreams
         for(puIter it = puMap.begin(); it != puMap.end(); ++it){
             it->second->close();
         }
-        //runPileupAnalysis();
-        // loop over pu 3 fold counts and write out a text file with the acceptance info
-        std::ofstream puOut;
-        puOut.open("./puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
-        for(std::map<int,int>::const_iterator it = puThreeFoldMap.begin(); it!=puThreeFoldMap.end(); ++it){
-            int nPU = it->first;
-            int n3Fold = it->second;
-            cout << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << endl;
-            puOut << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << "\n";
+        cout << 1 << " " << threeFoldMap[0] << endl;
+        for (unsigned int i = 0; i < puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            cout << nPU+1 << " " << threeFoldMap[puScenarios.at(i)] << endl;
         }
-        puOut.close();
+        // loop over pu 3 fold counts and write out a text file with the acceptance info
+        // std::ofstream puOut;
+        // puOut.open("./puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
+        // for(std::map<int,int>::const_iterator it = puThreeFoldMap.begin(); it!=puThreeFoldMap.end(); ++it){
+        //     int nPU = it->first;
+        //     int n3Fold = it->second;
+        //     cout << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << endl;
+        //     puOut << nPU << " " << n3Fold << " " << getPUEventNumber(eventCounter,nPU) << "\n";
+        // }
+        // puOut.close();
     }
 
     if (doBeamspotStudy){
         std::cout << "************BeamSpot Study Results**********" << std::endl;
-        std::cout << "Number of events with 3-fold coincidences: " << eventsWithThreeFoldCoin << std::endl;
+        std::cout << "Number of events with 3-fold coincidences: " << eventsWithThreeFoldCoin[0] << std::endl;
         std::cout << "Number of total events: " << eventCounter << std::endl;
         std::cout << "---> acceptance = " << acceptance << std::endl;
         std::cout << "This information is now being recorded in the text file." << std::endl;
-        beamspotInfo << phiAtZero << " " << r << " " <<  eventsWithThreeFoldCoin << " " <<  eventCounter << " " << acceptance <<  "\n";
+        beamspotInfo << phiAtZero << " " << r << " " <<  eventsWithThreeFoldCoin[0] << " " <<  eventCounter << " " << acceptance <<  "\n";
     }
     if (wantBinaryOutput) makeBinary();
     //std::cout << "Number of 3-fold coincidences: " << threeFoldCount << std::endl;
