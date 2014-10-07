@@ -84,6 +84,7 @@ public:
     int Event(){ return event; }
     unsigned int detUnitId(){ return theDetUnitId; }
     float energyLoss(){ return theEnergyLoss; }
+    float pabs(){ return thePabs; }
     LocalVector momentumAtEntry(){ return LocalVector(theThetaAtEntry,thePhiAtEntry,thePabs); }
 private:
     int channel;
@@ -152,10 +153,10 @@ private:
     virtual int getROC(PLTHit);
     virtual bool aboveThreshold(const PSimHit&);
     virtual int getPUEventNumber(int, int);
-    virtual int countThreeFoldCoincidences(const map< int,vector<PLTHit> >&);
+    virtual std::tuple<int,int> countThreeFoldCoincidences(const map< int,vector<PLTHit> >&);
     //virtual int countThreeFoldCoincidencesInCylinder(const map< int,vector<PLTHit> >&,double,double);
     virtual std::tuple<double,double> PixelGlobalXY(int,int);
-    virtual bool isFromIP(PLTHit);
+    virtual std::tuple<bool,double,double> isFromIP(PLTHit);
     virtual bool maskROC2Pixel(int,int);
     virtual bool maskTelescope(int);
     virtual std::vector<PLTSimHit*> initializeHitVector(int,int,int,int,int,double,double);
@@ -251,6 +252,10 @@ private:
     TH2D* MinusZ_MinusX_Tel3_ROC0_PixelMap;
     TH2D* MinusZ_MinusX_Tel3_ROC1_PixelMap;
     TH2D* MinusZ_MinusX_Tel3_ROC2_PixelMap;
+
+    // TH2D* rMin_zMin;
+    // TH2D* rMin_zMin_lowP;
+    // TH2D* rMin_zMin_highP;
     
     std::map< std::string,TH2D* > histMap;
     std::ofstream hitInfo;
@@ -258,9 +263,10 @@ private:
 
     double cylinderdZ;
     double cylinderR;
+    bool confineToIP;
     std::tuple<double,double,double> beamSpotPoint;
 
-    //std::ofstream hitInfo_ThreeFold;
+    std::ofstream trackInfo;
     bool inDigiMode;
     bool doPileup;
     bool doBeamspotStudy;
@@ -275,6 +281,7 @@ private:
     std::map< int,std::ofstream* > puMap; //key = #PU events, value = digifile ofstream* for that #PU events
     std::map< int,std::string > puFilenameMap;
     std::map< int,int > threeFoldMap; // key = #PU events, value = # of 3 fold coincidences for that PU scenario. Will always be used with nPU=0 (main events only, i.e. doPileup=false)
+    std::map< int,int > threeFoldFromIPMap; // key = #PU events, value = # of 3 fold coincidences for that PU scenario matched to IP. Will always be used with nPU=0 (main events only, i.e. doPileup=false)
     std::vector<int> puScenarios;
     typedef std::map<int,std::ofstream*>::iterator puIter;
     
@@ -295,6 +302,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
 
 {
     //now do what ever initialization is needed
+    trackInfo.open("trackInfo.txt");
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
     inDigiMode = iConfig.exists("digiFileName") && iConfig.exists("threshold");
     if ( (!iConfig.exists("digiFileName") && iConfig.exists("threshold")) || (iConfig.exists("digiFileName") && !iConfig.exists("threshold")) )
@@ -347,6 +355,14 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     eventCounter = 0;
     eventsWithThreeFoldCoin[0] = 0;
 
+    cylinderR = (iConfig.exists("cylinderR") ? iConfig.getParameter<double>("cylinderR") : -1. );
+    cylinderdZ = (iConfig.exists("cylinderdZ") ? iConfig.getParameter<double>("cylinderdZ") : -1. );
+    confineToIP = (cylinderR != -1.) && (cylinderdZ != -1.);
+    if (((cylinderR == -1.) && (cylinderdZ != -1.)) || ((cylinderR != -1.) && (cylinderdZ == -1.))){
+        throw cms::Exception("IPConfineIssue") << "Need to set both cylinder R and dZ explicitly!";
+    }
+    beamSpotPoint = std::make_tuple(0.,0.,0.);
+
     //pileup stuff
     if (doPileup){
         //just in this one place, define all the pileup scenarios under study
@@ -357,9 +373,9 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
         puScenarios.push_back(10);
         puScenarios.push_back(15);
         puScenarios.push_back(20);
-        puScenarios.push_back(25);
+        // puScenarios.push_back(25);
         puScenarios.push_back(30);
-        puScenarios.push_back(35);
+        // puScenarios.push_back(35);
         puScenarios.push_back(40);
 
         for(unsigned int i=0; i<puScenarios.size(); i++){
@@ -369,9 +385,6 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
             puFilenameMap[nPU] = ss.str();
             puMap[nPU] = new std::ofstream(puFilenameMap[nPU]);
         }
-        cylinderR = (iConfig.exists("cylinderR") ? iConfig.getParameter<double>("cylinderR") : 0. );
-        cylinderdZ = (iConfig.exists("cylinderdZ") ? iConfig.getParameter<double>("cylinderdZ") : 0. );
-        beamSpotPoint = std::make_tuple(0.,0.,0.);
     }
     
 }
@@ -384,6 +397,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
     // (e.g. close files, deallocate resources etc.)
     if (inDigiMode && !wantBinaryOutput) hitInfo.close(); //if the binary is made, this is already closed in the makeBinary() function
     if (doBeamspotStudy) beamspotInfo.close();
+    trackInfo.close();
     
 }
 
@@ -605,10 +619,11 @@ PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row
     return hitVector;
 
 }
-int
+tuple<int,int>
 PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& hitTracker){
 
     int threeFoldCount = 0;
+    int threeFoldFromIPCount = 0;
     for (std::map< int , std::vector<PLTHit> >::const_iterator iTel = hitTracker.begin(); iTel != hitTracker.end(); ++iTel) {
         std::vector<PLTHit> telHits = iTel->second;
         std::vector<double> hitPts(3,-1.); //initializes with length=3 and entries each=-1.
@@ -639,23 +654,28 @@ PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& h
             if (existsThreeFoldCoin) {
                 htel3fold->Fill(iTel->first);
                 threeFoldCount++;
-                // if(doPileup){ //if pileup study is run, count 3 fold coincidences consistent with originating from the IP
-                //     for (unsigned int i = 0; i < roc0Hits.size(); i++){
-                //         if ( isFromIP( roc0Hits.at(i) ) ){
-                //             //cout << "3 fold from IP!" << endl;
-                //             //for each pileup scenario, increment the number of 3 fold coincidences for that scenario by 1
-                //             for(unsigned int i=0; i<puScenarios.size(); i++){
-                //                 int nPU = puScenarios.at(i);
-                //                 puThreeFoldMap[nPU]++;
-                //             }
-                //             break; //when dealing with colinear tracks, don't break! Implement this later
-                //         }
-                //     }
-                // }
+                if(confineToIP){ //if pileup study is run, count 3 fold coincidences consistent with originating from the IP
+                    for (unsigned int i = 0; i < roc0Hits.size(); i++){
+                        bool fromIP;
+                        double rMin,zMin;
+                        std::tie(fromIP,rMin,zMin) = isFromIP( roc0Hits.at(i) );
+                        if ( fromIP ){
+                            threeFoldFromIPCount++;
+                            // rMin_zMin->Fill(rMin,zMin);
+                            float hitP = roc0Hits.at(i).pabs();
+                            trackInfo << rMin << " " << zMin << " " << hitP << "\n";
+                            // if (hitP < 1.) rMin_zMin_lowP->Fill(rMin,zMin);
+                            // else rMin_zMin_highP->Fill(rMin,zMin);
+                            break;
+                        }
+                    }
+                }//end if confineToIP
             }
         } //end else statement (telescopes with at least three hits)
     }//end loop over telescopes
-    return threeFoldCount;
+
+    //if confineToIP = false, we don't care about the second number, but if true, we care about both.  Just return them both in each case.
+    return make_tuple(threeFoldCount,threeFoldFromIPCount);
 }
 std::tuple<double,double>
 PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
@@ -673,7 +693,8 @@ PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
     return std::make_tuple(columnX,rowR);
 
 }
-bool
+//returns isFromIP, rMin, and zMin together to cut down on computation time
+std::tuple<bool,double,double>
 PLTSimHitAnalyzer::isFromIP(PLTHit hit){
 
     // Get pixel address, this will set x0,y0,z0 for a linear fit. Extrapolate line using momentum vector
@@ -710,6 +731,7 @@ PLTSimHitAnalyzer::isFromIP(PLTHit hit){
     int nSteps = 1000000;
     double rMin = 1e9;
     double rMax = -1;
+    double zMin = 1e9;
     bool fromIP = false;
     for(int iStep = 1; iStep < nSteps; iStep++){
 
@@ -723,6 +745,7 @@ PLTSimHitAnalyzer::isFromIP(PLTHit hit){
 
         if (rFromBS < rMin && zFromBS < cylinderdZ/2.) rMin = rFromBS;
         if (rFromBS > rMax && zFromBS < cylinderdZ/2.) rMax = rFromBS;
+        if (zFromBS < zMin && zFromBS < cylinderdZ/2.) zMin = zFromBS;
 
         //if (iStep % 50000 == 0 || iStep == 1 || fabs(z)<cylinderdZ/2.) cout << "point on track: " << iStep << " " << x << " " << y << " " << z << endl;
 
@@ -731,7 +754,7 @@ PLTSimHitAnalyzer::isFromIP(PLTHit hit){
     }
     hrMin->Fill(rMin);
     hrMax->Fill(rMax);
-    return fromIP;
+    return make_tuple(fromIP,rMin,zMin);
 
 }
 // ------------ method called for each event  ------------
@@ -952,13 +975,14 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
     map<int,TTree*> puTreeMap;
     map<int,map< int,vector<PLTHit> >> puHitTracker; //hits from main event + hits from PU in all PU scenarios (keys)
     if (doPileup){
-        TFile puInFile("pileuptree.root"); 
+        TFile puInFile("pileuptrees.root"); 
 
         for (unsigned int i = 0; i<puScenarios.size(); i++){
             int nPU = puScenarios.at(i);
             // NOTE: GET THE TREE CORRESPONDING TO THAT PU SCENARIO!
             // PUT ALL TREES IN ROOT FILE FIRST!!!! DO IT IN A WAY THAT'S EASY FOR THE LOOP TO DETERMINE WHICH TO USE AUTOMATICALLY
-            TTree* tree = (TTree*)( puInFile.Get("produce/tree") );
+            TString treeName = TString::Format("tree_PU%i",nPU);
+            TTree* tree = (TTree*)( puInFile.Get(treeName) );
             puTreeMap[nPU] = tree;
         }
 
@@ -1023,14 +1047,21 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
         // now analyze the puHitTracker to see if there are any 3 fold coincidences:
 
     } //end doPileup block
-    int threeFoldCount = countThreeFoldCoincidences(hitTracker);
+
+    int threeFoldCount;
+    int threeFoldFromIPCount;
+    std::tie(threeFoldCount,threeFoldFromIPCount) = countThreeFoldCoincidences(hitTracker);
     threeFoldMap[0] += threeFoldCount;
+    threeFoldFromIPMap[0] += threeFoldFromIPCount;
     if (threeFoldCount > 0) eventsWithThreeFoldCoin[0]++;
     if(doPileup){
         for (unsigned int i = 0; i<puScenarios.size(); i++){
             int nPU = puScenarios.at(i);
-            int puThreeFoldCount = countThreeFoldCoincidences(puHitTracker[nPU]);
+            int puThreeFoldCount;
+            int puThreeFoldFromIPCount;
+            std::tie(puThreeFoldCount,puThreeFoldFromIPCount) = countThreeFoldCoincidences(puHitTracker[nPU]);
             threeFoldMap[nPU] += puThreeFoldCount;
+            threeFoldFromIPMap[nPU] += puThreeFoldFromIPCount;
             //cout << nPU << " " << puThreeFoldCount << endl;
         }
     }
@@ -1062,6 +1093,9 @@ PLTSimHitAnalyzer::beginJob()
     h3foldPt = fs->make<TH1D>("h3foldPt","pT of 3-fold coincidence track",500,0,50);
     hrMin = fs->make<TH1D>("hrMin","rMin",400,0,200);
     hrMax = fs->make<TH1D>("hrMax","rMax",400,0,200);
+    // rMin_zMin = fs->make<TH2D>("rMin_zMin","rMin_zMin",100,0,100,1000,0,100);
+    // rMin_zMin_lowP = fs->make<TH2D>("rMin_zMin_lowP","rMin_zMin_lowP",1000000,0,1000000,1000,0,100);
+    // rMin_zMin_highP = fs->make<TH2D>("rMin_zMin_highP","rMin_zMin_highP",1000000,0,1000000,1000,0,100);
     PlusZ_PlusX_Tel0_ROC0_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC0_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC1_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC1_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
     PlusZ_PlusX_Tel0_ROC2_PixelMap = fs->make<TH2D>("PlusZ_PlusX_Tel0_ROC2_PixelMap","Pixel Hit Multiplicity",52,-0.5,51.5,80,-0.5,79.5);
@@ -1348,11 +1382,21 @@ PLTSimHitAnalyzer::endJob()
         for(puIter it = puMap.begin(); it != puMap.end(); ++it){
             it->second->close();
         }
+        cout << "no IP matching" << endl;
+        cout << " " << endl;
         cout << 1 << " " << threeFoldMap[0] << endl;
         for (unsigned int i = 0; i < puScenarios.size(); i++){
             int nPU = puScenarios.at(i);
-            cout << nPU+1 << " " << threeFoldMap[puScenarios.at(i)] << endl;
+            cout << nPU+1 << " " << threeFoldMap[nPU] << endl;
         }
+        cout << " " << endl;
+        cout << "IP matching" << endl;
+        cout << 1 << " " << threeFoldFromIPMap[0] << endl;
+        for (unsigned int i = 0; i < puScenarios.size(); i++){
+            int nPU = puScenarios.at(i);
+            cout << nPU+1 << " " << threeFoldFromIPMap[nPU] << endl;
+        }
+
         // loop over pu 3 fold counts and write out a text file with the acceptance info
         // std::ofstream puOut;
         // puOut.open("./puTextFiles/"+digiFileName+"_PUAccepInfo.txt");
