@@ -125,6 +125,17 @@ private:
     double eta;
 
 };
+class PLTCluster {
+public:
+    double X(){ return x; }
+    double Y(){ return y; }
+    int ROC(){ return roc; }
+
+private:
+    double x;
+    double y;
+    int  roc;
+};
 
 //
 // class declaration
