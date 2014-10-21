@@ -405,8 +405,7 @@ PLTSimHitAnalyzer::~PLTSimHitAnalyzer()
 //
 // member functions
 //
-std::vector<int>
-PLTSimHitAnalyzer::analyzeDetId(int detid){
+std::vector<int> PLTSimHitAnalyzer::analyzeDetId(int detid){
     std::stringstream ss;
     ss << detid;
     std::string detidstring = ss.str();
@@ -492,15 +491,13 @@ PLTSimHitAnalyzer::analyzeDetId(int detid){
     return infoVector;
 }
 
-int
-PLTSimHitAnalyzer::getROC(PLTHit hit){
+int PLTSimHitAnalyzer::getROC(PLTHit hit){
     int detid = hit.detUnitId();
     std::vector<int> infoVector = analyzeDetId(detid);
     return infoVector.at(3);
 }
 
-int
-PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
+int PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
     int channelNum = -1;
     if(pltNum == 0){
         if(halfCarriageNum == 0){
@@ -572,16 +569,14 @@ PLTSimHitAnalyzer::getChannel(int pltNum, int halfCarriageNum, int telNum){
     }
     return channelNum;
 }
-int
-PLTSimHitAnalyzer::getChannelFromHit(PLTHit hit){
+int PLTSimHitAnalyzer::getChannelFromHit(PLTHit hit){
     int detid = hit.detUnitId();
     vector<int> infoVector = analyzeDetId(detid);
     if (infoVector.size() != 6) cout << "Issue with detid!!!" << endl;
     return getChannel( infoVector.at(0),infoVector.at(1),infoVector.at(2) );
 }
 //every event number will be either a "signal" MinBias event or a "pileup" MinBias event -- figure out which signal event each event number corresponds to
-int
-PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){ 
+int PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){ 
     double ratio = (1.0*actualEventNum)/(1.0*(numPileupEvents+1));
     int event = static_cast<int>(ratio+1.);
     if ( ratio == 1.0*(event-1.) )
@@ -589,8 +584,7 @@ PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents){
     return event;
 }
 //set up to mask pixels in ROC2 to get a 6x6mm active area in the center of the sensor
-bool
-PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
+bool PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
     if( ((0<=row) && (row <=9)) || ((70<=row) && (row<=79)) )
         return true;
     else if( ((0<=col) && (col<=6)) || ((45<=col) && (col<=51)) )
@@ -598,29 +592,25 @@ PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
     else
         return false;
 }
-bool
-PLTSimHitAnalyzer::aboveThreshold(const PSimHit& hit){
+bool PLTSimHitAnalyzer::aboveThreshold(const PSimHit& hit){
 
     double numberOfElectrons = ( (hit.energyLoss()*(1e9))/3.6 ); //convert to eV then to electrons
     if (numberOfElectrons > threshold) return true;
     else return false;
 }
-bool
-PLTSimHitAnalyzer::maskTelescope(int tel){
+bool PLTSimHitAnalyzer::maskTelescope(int tel){
     if ( (tel == 1) || (tel == 3) )
         return true;
     else
         return false;
 }
-std::vector<PLTSimHit*> 
-PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row, int adc, double pt, double eta){
+std::vector<PLTSimHit*> PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row, int adc, double pt, double eta){
     std::vector<PLTSimHit*> hitVector;
     hitVector.push_back( new PLTSimHit(channel,roc,column,row,adc,pt,eta) );
     return hitVector;
 
 }
-tuple<int,int>
-PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& hitTracker){
+tuple<int,int> PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& hitTracker){
 
     int threeFoldCount = 0;
     int threeFoldFromIPCount = 0;
@@ -677,8 +667,7 @@ PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& h
     //if confineToIP = false, we don't care about the second number, but if true, we care about both.  Just return them both in each case.
     return make_tuple(threeFoldCount,threeFoldFromIPCount);
 }
-std::tuple<double,double>
-PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
+std::tuple<double,double> PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
     // FOR ROC0 ONLY!!!
 
     // some geometry measurments needed (all length measurments are in mm unless I say otherwise)
@@ -694,8 +683,7 @@ PLTSimHitAnalyzer::PixelGlobalXY(int row, int column){
 
 }
 //returns isFromIP, rMin, and zMin together to cut down on computation time
-std::tuple<bool,double,double>
-PLTSimHitAnalyzer::isFromIP(PLTHit hit){
+std::tuple<bool,double,double> PLTSimHitAnalyzer::isFromIP(PLTHit hit){
 
     // Get pixel address, this will set x0,y0,z0 for a linear fit. Extrapolate line using momentum vector
 
@@ -758,8 +746,7 @@ PLTSimHitAnalyzer::isFromIP(PLTHit hit){
 
 }
 // ------------ method called for each event  ------------
-void
-PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
+void PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
 
     eventCounter++;
@@ -1070,8 +1057,7 @@ PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSet
 
 
 // ------------ method called once each job just before starting event loop  ------------
-void 
-PLTSimHitAnalyzer::beginJob()
+void PLTSimHitAnalyzer::beginJob()
 {
     hSimHitTheta = fs->make<TH1D>("hSimHitTheta","SimHit Theta", 300,0,3.1416);
     hGenTheta = fs->make<TH1D>("hGenTheta","GenParticle Theta", 300,0,3.1416);
@@ -1199,8 +1185,7 @@ PLTSimHitAnalyzer::beginJob()
     
 }
 //The vast majority of the translation to binary code was written by Dean Hidas
-void
-PLTSimHitAnalyzer::makeBinary()
+void PLTSimHitAnalyzer::makeBinary()
 {
     std::cout << "" << std::endl;
     std::cout << "*****************************************************" << std::endl;
@@ -1368,8 +1353,7 @@ PLTSimHitAnalyzer::makeBinary()
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
-void 
-PLTSimHitAnalyzer::endJob() 
+void PLTSimHitAnalyzer::endJob() 
 {
     double entries = havgpixelhitcount->GetEntries();
     havgpixelhitcount->Scale(1./entries);
@@ -1422,32 +1406,27 @@ PLTSimHitAnalyzer::endJob()
 }
 
 // ------------ method called when starting to processes a run  ------------
-void 
-PLTSimHitAnalyzer::beginRun(edm::Run const&, edm::EventSetup const&)
+void PLTSimHitAnalyzer::beginRun(edm::Run const&, edm::EventSetup const&)
 {
 }
 
 // ------------ method called when ending the processing of a run  ------------
-void 
-PLTSimHitAnalyzer::endRun(edm::Run const&, edm::EventSetup const&)
+void PLTSimHitAnalyzer::endRun(edm::Run const&, edm::EventSetup const&)
 {
 }
 
 // ------------ method called when starting to processes a luminosity block  ------------
-void 
-PLTSimHitAnalyzer::beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&)
+void PLTSimHitAnalyzer::beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&)
 {
 }
 
 // ------------ method called when ending the processing of a luminosity block  ------------
-void 
-PLTSimHitAnalyzer::endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&)
+void PLTSimHitAnalyzer::endLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&)
 {
 }
 
 // ------------ method fills 'descriptions' with the allowed parameters for the module  ------------
-void
-PLTSimHitAnalyzer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
+void PLTSimHitAnalyzer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) {
     //The following says we do not know what parameters are allowed so do no validation
     // Please change this to state exactly what you do use, even if it is no parameters
     edm::ParameterSetDescription desc;
