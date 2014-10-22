@@ -14,6 +14,12 @@ options.register('threshold',
                  VarParsing.varType.int,
                  "electron threshold for writing hit to digi output"
 )
+options.register('applyPixelMask',
+                 False,
+                 VarParsing.multiplicity.singleton,
+                 VarParsing.varType.bool,
+                 "whether or not to apply a pixel mask"
+)
 options.register('doBeamspotStudy',
                  False,
                  VarParsing.multiplicity.singleton,
@@ -201,7 +207,8 @@ process.simhitplots = cms.EDAnalyzer('PLTSimHitAnalyzer',
     threshold = cms.int32(options.threshold),
     wantBinaryOutput = cms.bool(options.wantBinaryOutput), #flag to create additional binary output as well as the text
     cylinderR = cms.double(options.cylinderR),
-    cylinderdZ = cms.double(options.cylinderdZ)
+    cylinderdZ = cms.double(options.cylinderdZ),
+    applyPixelMask = cms.bool(options.applyPixelMask)
 )
 
 

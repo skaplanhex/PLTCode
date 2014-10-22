@@ -102,29 +102,6 @@ private:
     float thePhiAtEntry;
 
 };
-// keep for use in beamspot study if ever needed, but I may change the class later
-class PLTSimHit {
-public:
-    PLTSimHit(int channel, int roc, int column, int row, int adc, double pt, double eta)
-        :channel(channel),roc(roc),column(column),row(row),adc(adc),pt(pt),eta(eta){};
-    ~PLTSimHit(){};
-    int Channel(){ return channel; }
-    int ROC(){ return roc; }
-    int Column(){ return column; }
-    int Row(){ return row; }
-    int ADC(){ return adc; }
-    double Pt(){ return pt; }
-    double Eta(){ return eta; }
-private:
-    int channel;
-    int roc;
-    int column;
-    int row;
-    int adc;
-    double pt;
-    double eta;
-
-};
 
 //
 // class declaration
@@ -157,9 +134,9 @@ private:
     //virtual int countThreeFoldCoincidencesInCylinder(const map< int,vector<PLTHit> >&,double,double);
     virtual std::tuple<double,double> PixelGlobalXY(int,int);
     virtual std::tuple<bool,double,double> isFromIP(PLTHit);
-    virtual bool maskROC2Pixel(int,int);
+    virtual bool in6x6(int,int);
+    virtual bool in4p2x4p2(int,int);
     virtual bool maskTelescope(int);
-    virtual std::vector<PLTSimHit*> initializeHitVector(int,int,int,int,int,double,double);
     virtual void makeBinary();
     
     // ----------member data ---------------------------
@@ -261,6 +238,8 @@ private:
     std::ofstream hitInfo;
     std::ofstream beamspotInfo; //holds acceptance vs. r for each phi scenario
 
+    bool applyPixelMask;
+
     double cylinderdZ;
     double cylinderR;
     bool confineToIP;
@@ -304,6 +283,7 @@ PLTSimHitAnalyzer::PLTSimHitAnalyzer(const edm::ParameterSet& iConfig)
     //now do what ever initialization is needed
     trackInfo.open("trackInfo.txt");
     simHitLabel = iConfig.getParameter<edm::InputTag>("PLTHits");
+    applyPixelMask = (iConfig.exists("applyPixelMask") ? iConfig.getParameter<bool>("applyPixelMask") : false);
     inDigiMode = iConfig.exists("digiFileName") && iConfig.exists("threshold");
     if ( (!iConfig.exists("digiFileName") && iConfig.exists("threshold")) || (iConfig.exists("digiFileName") && !iConfig.exists("threshold")) )
         throw cms::Exception("DigiIssue") << "Digi mode not set up properly. Make sure BOTH digiFileName AND threshold are both set!\n";
@@ -584,13 +564,24 @@ int PLTSimHitAnalyzer::getPUEventNumber(int actualEventNum, int numPileupEvents)
     return event;
 }
 //set up to mask pixels in ROC2 to get a 6x6mm active area in the center of the sensor
-bool PLTSimHitAnalyzer::maskROC2Pixel(int row, int col){
+bool PLTSimHitAnalyzer::in6x6(int row, int col){
     if( ((0<=row) && (row <=9)) || ((70<=row) && (row<=79)) )
-        return true;
-    else if( ((0<=col) && (col<=6)) || ((45<=col) && (col<=51)) )
-        return true;
-    else
         return false;
+    else if( ((0<=col) && (col<=6)) || ((45<=col) && (col<=51)) )
+        return false;
+    else
+        return true;
+}
+//set up to mask pixels in ROC2 to get a 4.2x4.2mm active area in the center of the sensor
+//yes, the method name sucks.
+bool PLTSimHitAnalyzer::in4p2x4p2(int row, int col){
+    if( ((0<=row) && (row <=18)) || ((61<=row) && (row<=79)) )
+        return false;
+    else if( ((0<=col) && (col<=11)) || ((40<=col) && (col<=51)) )
+        return false;
+    else
+        return true;
+
 }
 bool PLTSimHitAnalyzer::aboveThreshold(const PSimHit& hit){
 
@@ -603,12 +594,6 @@ bool PLTSimHitAnalyzer::maskTelescope(int tel){
         return true;
     else
         return false;
-}
-std::vector<PLTSimHit*> PLTSimHitAnalyzer::initializeHitVector(int channel, int roc, int column, int row, int adc, double pt, double eta){
-    std::vector<PLTSimHit*> hitVector;
-    hitVector.push_back( new PLTSimHit(channel,roc,column,row,adc,pt,eta) );
-    return hitVector;
-
 }
 tuple<int,int> PLTSimHitAnalyzer::countThreeFoldCoincidences(const map< int,vector<PLTHit> >& hitTracker){
 
@@ -814,6 +799,8 @@ void PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup&
         int rowNo = infoVector.at(4);
         int columnNo = infoVector.at(5);
 
+        if ( applyPixelMask && !in4p2x4p2(rowNo,columnNo) ) continue;
+
 
         //Fill single ROC histograms
         std::stringstream ss;
@@ -902,41 +889,7 @@ void PLTSimHitAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup&
                 }
             }
         }
-        //separate conditions by beamspot study or no
 
-        //only count ROC2 hits for 3-fold coincidence if they pass the pixel mask
-        // if ( doBeamspotStudy && (!runFourTelescopes) ) {
-        //     if (hitTracker.count(planeLoc) == 0) {
-        //         if (planeNo != 2)
-        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-        //     }
-        //     // if there has been a hit, add the plane number of this hit to the others
-        //     else{
-        //         if (planeNo != 2)
-        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-        //     }
-        // }
-        // else if ( doBeamspotStudy && runFourTelescopes && (!maskTelescope(telNo)) ){
-        //     if (hitTracker.count(planeLoc) == 0) {
-        //         if (planeNo != 2)
-        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-        //             hitTracker[planeLoc] = initializeHitVector(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta);
-        //     }
-        //     // if there has been a hit, add the plane number of this hit to the others
-        //     else{
-        //         if (planeNo != 2)
-        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-        //         else if ( (planeNo == 2) && !maskROC2Pixel(rowNo,columnNo) )
-        //             hitTracker[planeLoc].push_back(new PLTSimHit(channelNum,planeNo,columnNo,rowNo,adc,hitPt,eta));
-        //     }
-        // }
-        // else{
-            // if there hasn't been a hit in that telescope yet
         PLTHit newHit(hit.pabs(),hit.timeOfFlight(),hit.energyLoss(),hit.particleType(),hit.detUnitId(),hit.thetaAtEntry(),hit.phiAtEntry());
         if (hitTracker.count(channelNum) == 0) {
             std::vector<PLTHit> vec;
